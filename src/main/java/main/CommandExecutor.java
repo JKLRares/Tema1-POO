@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.List;
+import java.util.Map;
 import fileio.*;
 import main.soils.*;
 import main.plants.*;
@@ -54,6 +56,9 @@ public class CommandExecutor {
                 }
                 if (cell.getPlant() != null && cell.getPlant().isScanned()) {
                     cell.getPlant().grow();
+                    if (cell.getPlant().getLevel().equals("DEAD")) {
+                        cell.setPlant(null);
+                    }
                 }
                 if (cell.getPlant() != null && cell.getAir() != null && cell.getPlant().isScanned()) {
                     double oxygenAdd = cell.getPlant().getOxygenOutput() + cell.getPlant().getMaturityModifier();
@@ -240,6 +245,87 @@ public class CommandExecutor {
                             resultNode.put("message", "ERROR: Object not found. Cannot perform action");
                         } else {
                             robot.setRobotBattery(battery);
+                        }
+                    }
+                    resultNode.put("timestamp", timestamp);
+                    outputArray.add(resultNode);
+                    break;
+
+                case "learnFact":
+                    if(timestamp < robotChargingTimestamp) {
+                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    } else {
+                        int cost = 2;
+                        if (robot.getRobotBattery() < cost) {
+                            resultNode.put("message",
+                                    "ERROR: Not enough battery left. Cannot perform action");
+                        } else {
+                            String entityName = cmd.getComponents();
+                            String factInfo = cmd.getSubject();
+
+                            if (inventory.getCollectedItems().contains(entityName)) {
+                                inventory.addFact(entityName, factInfo);
+                                robot.setRobotBattery(robot.getRobotBattery() - cost);
+                                resultNode.put("message",
+                                        "The fact has been successfully saved in the database.");
+                            } else {
+                                resultNode.put("message",
+                                        "ERROR: Subject not yet saved. Cannot perform action");
+                            }
+                        }
+                    }
+                    resultNode.put("timestamp", timestamp);
+                    outputArray.add(resultNode);
+                    break;
+
+                case "printKnowledgeBase":
+                    if(timestamp < robotChargingTimestamp) {
+                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    } else {
+                        ArrayNode output = mapper.createArrayNode();
+                        List<String> items = inventory.getCollectedItems();
+                        Map<String, List<String>> knowledgeBase = inventory.getKnowledgeBase();
+
+                        for (String item : items) {
+                            if (knowledgeBase.containsKey(item) && !knowledgeBase.get(item).isEmpty()) {
+                                ObjectNode itemNode = mapper.createObjectNode();
+                                itemNode.put("topic", item);
+
+                                ArrayNode factsArray = mapper.createArrayNode();
+                                for (String fact : knowledgeBase.get(item)) {
+                                    factsArray.add(fact);
+                                }
+                                itemNode.set("facts", factsArray);
+                                output.add(itemNode);
+                            }
+                        }
+                        resultNode.set("output", output);
+                    }
+                    resultNode.put("timestamp", timestamp);
+                    outputArray.add(resultNode);
+                    break;
+
+                case "improveEnvironment":
+                    if(timestamp < robotChargingTimestamp) {
+                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    } else {
+                        int cost = 10;
+                        if(robot.getRobotBattery() < cost) {
+                            resultNode.put("message",
+                                    "ERROR: Not enough battery left. Cannot perform action");
+                        } else {
+                            String improvementType = cmd.getImprovementType();
+                            String name = cmd.getName();
+                            if (!inventory.getCollectedItems().contains(name)) {
+                                resultNode.put("message", "ERROR: Subject not yet saved. Cannot perform action");
+                            } else if (!inventory.checkRequirement(name, improvementType)) {
+                                resultNode.put("message", "ERROR: Cannot perform action");
+                            } else {
+                                Cell currentCell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
+                                String successMessage = inventory.applyImprovement(currentCell, improvementType, name);
+                                robot.setRobotBattery(robot.getRobotBattery() - 10);
+                                resultNode.put("message", successMessage);
+                            }
                         }
                     }
                     resultNode.put("timestamp", timestamp);
