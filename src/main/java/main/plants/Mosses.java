@@ -15,7 +15,7 @@ public class Mosses extends Plant{
     }
 
     @Override
-    public int getStuck() {
+    public int getStuckPossibility() {
         return 40;
     }
 }

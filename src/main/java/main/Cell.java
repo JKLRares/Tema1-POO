@@ -5,7 +5,6 @@ import lombok.Setter;
 @Getter @Setter
 public class Cell {
     private int x, y;
-
     private Plant plant;
     private Animal animal;
     private Water water;

@@ -18,7 +18,8 @@ public class Water extends Entity{
         this.turbidity = 1 - (turbidity / 100);
         this.contaminantIndex = 1 - (contaminantIndex / 100);
         this.frozenScore = normalizeIsFrozen(isFrozen);
-        this.waterQuality = (0.3 * purity + 0.2 * ph + 0.15 * salinity + 0.1 * turbidity + 0.15 * contaminantIndex + 0.2 * frozenScore) * 100;
+        this.waterQuality = (0.3 * purity + 0.2 * ph + 0.15 * salinity + 0.1 * turbidity + 0.15 * contaminantIndex +
+                0.2 * frozenScore) * 100;
     }
 
     private int normalizeIsFrozen(boolean isFrozen) {
@@ -30,11 +31,11 @@ public class Water extends Entity{
 
     public String resultWaterQaulity(double waterQuality) {
         if(waterQuality >= 70) {
-            return "Good";
+            return "good";
         } else if(waterQuality >= 40) {
-            return "Moderate";
+            return "moderate";
         } else {
-            return "Poor";
+            return "poor";
         }
     }
 

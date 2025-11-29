@@ -15,7 +15,7 @@ public class FloweringPlants extends Plant {
     }
 
     @Override
-    public int getStuck() {
+    public int getStuckPossibility() {
         return 90;
     }
 }

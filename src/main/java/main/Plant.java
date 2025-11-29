@@ -1,15 +1,25 @@
 package main;
 import lombok.Getter;
+import lombok.Setter;
 
-@Getter
+@Getter @Setter
 public abstract class Plant extends Alive {
 	private String level;
-	private double growingLevel;
+	private double growingLevel, stuckProb;
 
     private PlantMaturity maturity;
 
+    public Plant(int x, int y, String type, String name, double mass, double growingLevel, String level,
+                 boolean scanned) {
+        super(x, y, mass, scanned, name, type);
+        this.level = "YOUNG";
+        this.growingLevel = 0.0;
+        this.maturity = PlantMaturity.YOUNG;
+        this.stuckProb = getStuckPossibility() / 100.0;
+    }
+
     public abstract double getOxygenOutput();
-    public abstract int getStuck();
+    public abstract int getStuckPossibility();
 
     public double getMaturityModifier() {
         return switch (this.maturity) {
@@ -20,38 +30,24 @@ public abstract class Plant extends Alive {
         };
     }
 
-	public Plant(int x, int y, String type, String name, double mass, double growingLevel, String level,
-                 boolean scanned) {
-		super(x, y, mass, scanned, name, type);
-		this.level = "YOUNG";
-		this.growingLevel = 0.0;
-        this.maturity = PlantMaturity.YOUNG;
-	}
-
-//	public double calculateOxygenOutput(double oxygenLevel) {
-//		double modifier = this.getMaturityModifier();
-//		oxygenLevel = oxygenLevel + this.getType().getOxygenOutput() + modifier;
-//		return oxygenLevel;
-//	}
-
 	public void grow() {
-        double modifier = this.getMaturityModifier();
-		this.growingLevel += modifier;
 		if(this.growingLevel >= 1.0) {
 			this.growingLevel = 0.0;
 			if(this.level.equals("YOUNG")) {
 				this.level = "MATURE";
+                this.maturity = PlantMaturity.MATURE;
 			} else if(this.level.equals("MATURE")) {
 				this.level = "OLD";
+                this.maturity = PlantMaturity.OLD;
 			} else if(this.level.equals("OLD")) {
 				this.level = "DEAD";
-				die();
+//				die();
 			}
 		}
 	}
 
     @Override
-    public void die() {
+    public void die(Entity entity) {
 
     }
 

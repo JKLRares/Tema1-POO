@@ -1,9 +1,9 @@
 package main;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import fileio.InputLoader; // Importing the provided loader
 
 import java.io.File;
 import java.io.IOException;
@@ -21,16 +21,10 @@ public final class Main {
 
         ArrayNode output = MAPPER.createArrayNode();
 
-        File inputFile = new File(inputPath);
-        JsonNode jsonInput = MAPPER.readTree(inputFile);
+        InputLoader inputLoader = new InputLoader(inputPath);
 
-        InputLoader inputLoader = new InputLoader();
-        Matrix matrix = inputLoader.loadWorld(jsonInput);
-
-        if (jsonInput.has("commands")) {
-            CommandExecutor executor = new CommandExecutor(matrix, MAPPER);
-            executor.executeCommands(jsonInput.get("commands"), output);
-        }
+        CommandExecutor executor = new CommandExecutor(inputLoader, MAPPER);
+        executor.executeCommands(output);
 
         File outputFile = new File(outputPath);
         outputFile.getParentFile().mkdirs();

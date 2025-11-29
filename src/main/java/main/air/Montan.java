@@ -1,7 +1,7 @@
 package main.air;
 import lombok.Getter;
-
 import main.Air;
+import fileio.CommandInput;
 
 @Getter
 public class Montan extends Air {
@@ -10,12 +10,19 @@ public class Montan extends Air {
                   double temperature, double oxygenLevel, double altitude) {
         super(x, y, mass, scanned, name, type, humidity, temperature, oxygenLevel);
         this.altitude = altitude;
+        setAirQual(airQuality());
     }
 
     @Override
     public double initialAirQuality() {
         double oxygenFactor = getOxygenLevel() - (altitude / 1000 * 0.5);
         return (oxygenFactor * 2) + (getHumidity() * 0.6);
+    }
+
+    @Override
+    public void event(CommandInput cmd) {
+        double a = 0.1;
+        setAirQual(getAirQual() - (cmd.getNumberOfHikers() * a));
     }
 
     @Override

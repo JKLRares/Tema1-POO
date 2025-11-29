@@ -4,7 +4,7 @@ import lombok.Setter;
 
 @Getter @Setter
 public abstract class Entity {
-	private final int x, y;
+	private int x, y;
     private double mass;
     private boolean scanned;
     private String name;

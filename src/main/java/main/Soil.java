@@ -29,11 +29,11 @@ public abstract class Soil extends Entity {
     public String resultSoilQuality() {
         double score = this.soilQuality();
         if (score >= 70) {
-            return "Good";
+            return "good";
         } else if (score >= 40) {
-            return "Moderate";
+            return "moderate";
         } else {
-            return "Poor";
+            return "poor";
         }
     }
 

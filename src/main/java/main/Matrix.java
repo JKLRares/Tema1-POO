@@ -1,11 +1,11 @@
 package main;
 import lombok.Getter;
+import lombok.Setter;
 
-@Getter
+@Getter @Setter
 public class Matrix {
     private Cell[][] grid;
-    private int height;
-    private int width;
+    private int height, width;
 
     public Matrix(int rows, int cols) {
         this.height = rows;
