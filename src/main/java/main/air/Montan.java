@@ -20,9 +20,13 @@ public class Montan extends Air {
     }
 
     @Override
-    public void event(CommandInput cmd) {
-        double a = 0.1;
-        setAirQual(getAirQual() - (cmd.getNumberOfHikers() * a));
+    public boolean event(CommandInput cmd) {
+        if (cmd.getNumberOfHikers() > 0) {
+            double a = 0.1;
+            setAirQual(getAirQual() - (cmd.getNumberOfHikers() * a));
+            return true;
+        }
+        return false;
     }
 
     @Override

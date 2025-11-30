@@ -16,9 +16,7 @@ public abstract class Air extends Entity {
 
     public abstract double initialAirQuality();
     public abstract int maxScore();
-    public void event(CommandInput cmd) {
-
-    }
+    public abstract boolean event(CommandInput cmd);
 
     public double airQuality() {
         double normalizeScore = Math.max(0, Math.min(100, initialAirQuality()));

@@ -20,11 +20,15 @@ public class Temperat extends Air {
     }
 
     @Override
-    public void event(CommandInput cmd) {
-        season = cmd.getSeason();
-        double a = 15, b = 0;
-        double seasonPenalty = season.equalsIgnoreCase("Spring") ? 15 : 0;
-        setAirQual(getAirQual() - seasonPenalty);
+    public boolean event(CommandInput cmd) {
+        if(cmd.getSeason() != null) {
+            season = cmd.getSeason();
+            double a = 15, b = 0;
+            double seasonPenalty = season.equalsIgnoreCase("Spring") ? 15 : 0;
+            setAirQual(getAirQual() - seasonPenalty);
+            return true;
+        }
+        return false;
     }
 
     @Override

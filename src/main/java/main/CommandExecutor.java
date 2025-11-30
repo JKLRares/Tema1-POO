@@ -90,7 +90,7 @@ public class CommandExecutor {
                     previousTimestamp = timestamp;
                     resultNode.put("message", "Simulation has started.");
                 } else {
-                    resultNode.put("message", "ERROR: ");
+                    resultNode.put("message", "ERROR: Simulation already started. Cannot perform action");
                 }
 
                 resultNode.put("timestamp", timestamp);
@@ -99,8 +99,12 @@ public class CommandExecutor {
             }
 
             if (commandName.equals("endSimulation")) {
-                simulationRunning = false;
-                resultNode.put("message", "Simulation has ended.");
+                if (!simulationRunning) {
+                    resultNode.put("message", "ERROR: Simulation not started. Cannot perform action");
+                } else {
+                    simulationRunning = false;
+                    resultNode.put("message", "Simulation has ended.");
+                }
                 resultNode.put("timestamp", timestamp);
                 outputArray.add(resultNode);
                 continue;
@@ -187,16 +191,21 @@ public class CommandExecutor {
                     if(timestamp < robotChargingTimestamp) {
                         resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
                     } else {
+                        boolean changed = false;
                         for (int x = 0; x < matrix.getWidth(); x++) {
                             for (int y = 0; y < matrix.getHeight(); y++) {
                                 Cell cell = matrix.getCell(x, y);
-                                if (cell.getAir() != null) {
-                                    cell.getAir().event(cmd);
+                                if (cell.getAir() != null && cell.getAir().event(cmd)) {
+                                    changed = true;
                                 }
                             }
                         }
-                        changeWeatherTimestamp = timestamp + 2;
-                        resultNode.put("message", "The weather has changed.");
+                        if(changed) {
+                            changeWeatherTimestamp = timestamp + 2;
+                            resultNode.put("message", "The weather has changed.");
+                        } else {
+                            resultNode.put("message", "ERROR: The weather change does not affect the environment. Cannot perform action");
+                        }
                     }
                     resultNode.put("timestamp", timestamp);
                     outputArray.add(resultNode);
@@ -210,8 +219,7 @@ public class CommandExecutor {
                         boolean checked = false;
                         Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
                         if(battery < 0) {
-                            resultNode.put("message", "ERROR: Not enough battery left. Cannot perform" +
-                                    "action");
+                            resultNode.put("message", "ERROR: Not enough energy to perform action");
                         } else {
                             if(cmd.getColor().equalsIgnoreCase("none") &&
                                     cmd.getSmell().equalsIgnoreCase("none") &&
@@ -240,11 +248,11 @@ public class CommandExecutor {
                                 resultNode.put("message", "The scanned object is an animal.");
                                 checked = true;
                             }
-                        }
-                        if(!checked) {
-                            resultNode.put("message", "ERROR: Object not found. Cannot perform action");
-                        } else {
-                            robot.setRobotBattery(battery);
+                            if(!checked) {
+                                resultNode.put("message", "ERROR: Object not found. Cannot perform action");
+                            } else {
+                                robot.setRobotBattery(battery);
+                            }
                         }
                     }
                     resultNode.put("timestamp", timestamp);
@@ -319,7 +327,7 @@ public class CommandExecutor {
                             if (!inventory.getCollectedItems().contains(name)) {
                                 resultNode.put("message", "ERROR: Subject not yet saved. Cannot perform action");
                             } else if (!inventory.checkRequirement(name, improvementType)) {
-                                resultNode.put("message", "ERROR: Cannot perform action");
+                                resultNode.put("message", "ERROR: Fact not yet saved. Cannot perform action");
                             } else {
                                 Cell currentCell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
                                 String successMessage = inventory.applyImprovement(currentCell, improvementType, name);
@@ -560,7 +568,6 @@ public class CommandExecutor {
             fullDump.remove(List.of("humidity", "temperature", "oxygenLevel", "airQuality", "airQual", "dustParticles",
                     "season", "rainfall"));
             airNode.setAll(fullDump);
-
             envNode.set("air", airNode);
         }
 

@@ -20,10 +20,14 @@ public class Polar extends Air {
     }
 
     @Override
-    public void event(CommandInput cmd) {
-        this.windSpeed = cmd.getWindSpeed();
-        double a = 0.2;
-        setAirQual(getAirQual() - (this.windSpeed * a));
+    public boolean event(CommandInput cmd) {
+        if(cmd.getType() != null && cmd.getType().trim().equals("polarStorm")) {
+            this.windSpeed = cmd.getWindSpeed();
+            double a = 0.2;
+            setAirQual(getAirQual() - (this.windSpeed * a));
+            return true;
+        }
+        return false;
     }
 
     @Override
