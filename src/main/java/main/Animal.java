@@ -53,13 +53,13 @@ public abstract class Animal extends Alive {
     }
 
     private double calculateScore(Cell cell) {
-        boolean hasPlant = cell.getPlant() != null;
-        boolean hasWater = cell.getWater() != null;
+        boolean hasPlant = cell.getPlant() != null && cell.getPlant().isScanned();
+        boolean hasWater = cell.getWater() != null && cell.getWater().isScanned();
 
         if(hasPlant && hasWater) {
-            return 1000.0 + cell.getWater().getWaterQuality();
+            return 10000.0 + cell.getWater().getWaterQuality();
         } else if (hasPlant) {
-            return 500.0;
+            return 5000.0;
         } else if (hasWater) {
             return 200.0 + cell.getWater().getWaterQuality();
         }
@@ -127,8 +127,7 @@ public abstract class Animal extends Alive {
 
     private void eatPlant(Cell cell, Matrix map, Cell victim) {
         setMass((getMass() + victim.getPlant().getMass()));
-        victim.getPlant().setMass(0);
-        victim.getPlant().setLevel("DEAD");
+        victim.setPlant(null);
     }
 
     private void drink(Cell cell, Matrix map, Cell victim) {
@@ -136,6 +135,9 @@ public abstract class Animal extends Alive {
         double waterToDrink = Math.min(getMass() * intakeRate, victim.getWater().getMass());
         victim.getWater().setMass(victim.getWater().getMass() - waterToDrink);
         setMass(getMass() + waterToDrink);
+        if(victim.getWater().getMass() <= 0) {
+            victim.setWater(null);
+        }
     }
 
     @Override

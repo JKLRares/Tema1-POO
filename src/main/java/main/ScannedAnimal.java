@@ -30,8 +30,7 @@ public class ScannedAnimal {
 
                 int scanTime = animal.getScanTimestamp();
                 int timeDiff = currentTimestamp - scanTime;
-
-                if (timeDiff > 0 && scanTime > 0 && timeDiff % 2 == 0) {
+                if (timeDiff % 2 == 0) {
                     animal.tryToAct(map);
                 }
             }

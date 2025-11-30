@@ -67,8 +67,8 @@ public class CommandExecutor {
                     cell.getAir().setAirQual(cell.getAir().airQuality());
                 }
             }
-            scannedAnimals.updateAll(timestamp, matrix);
         }
+        scannedAnimals.updateAll(timestamp, matrix);
     }
 
     public void executeCommands(ArrayNode outputArray) {
@@ -90,7 +90,7 @@ public class CommandExecutor {
                     previousTimestamp = timestamp;
                     resultNode.put("message", "Simulation has started.");
                 } else {
-                    resultNode.put("message", "ERROR: No more simulations to load.");
+                    resultNode.put("message", "ERROR: ");
                 }
 
                 resultNode.put("timestamp", timestamp);
