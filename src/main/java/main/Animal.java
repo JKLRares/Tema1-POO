@@ -42,13 +42,9 @@ public abstract class Animal extends Entity {
      * @param timestamp the current simulation time.
      */
     public final void tryToAct(final Matrix map, final int timestamp) {
-        System.out.println("DEBUG [Time " + timestamp + "] " + getName() + " at (" + getX()
-                + "," + getY() + "): TryToAct called. IsScanned: " + isScanned());
         if (isScanned()) {
             Cell best = findBestNeighbor(map);
             if (best != null) {
-                System.out.println("DEBUG [Time " + timestamp + "] " + getName()
-                        + ": DECISION -> Moving to (" + best.getX() + "," + best.getY() + ")");
                 interact(map.getCell(getX(), getY()), map, best);
                 move(map, best);
             }
@@ -74,8 +70,6 @@ public abstract class Animal extends Entity {
                 if (!isCarnivore && neighbor.getAnimal() != null) {
                     continue;
                 }
-                System.out.println("DEBUG:   Checking neighbor (" + nx + "," + ny
-                        + ") -> Score: " + score);
                 if (score > bestScore) {
                     bestScore = score;
                     best = neighbor;
@@ -101,17 +95,6 @@ public abstract class Animal extends Entity {
     private double calculateScore(final Cell cell) {
         boolean hasPlant = cell.getPlant() != null && cell.getPlant().isScanned();
         boolean hasWater = cell.getWater() != null && cell.getWater().isScanned();
-        if (cell.getPlant() != null || cell.getWater() != null) {
-            String plantStatus = (cell.getPlant() == null) ? "None"
-                    : (cell.getPlant().getName() + " (Scanned="
-                    + cell.getPlant().isScanned() + ")");
-            String waterStatus = (cell.getWater() == null) ? "None"
-                    : (cell.getWater().getName() + " (Scanned="
-                    + cell.getWater().isScanned() + ")");
-
-            System.out.println("DEBUG:     Inside (" + cell.getX() + "," + cell.getY()
-                    + ") saw: Plant=[" + plantStatus + "] Water=[" + waterStatus + "]");
-        }
         if (hasPlant && hasWater) {
             return SCORE_BOTH + cell.getWater().getWaterQuality();
         } else if (hasPlant) {

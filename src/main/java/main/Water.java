@@ -54,20 +54,6 @@ public final class Water extends Entity {
         return NOT_FROZEN_VALUE;
     }
 
-    /**
-     * Determines the quality text (good, moderate, poor) based on the score.
-     * @param quality the calculated water quality score.
-     * @return the string representation of quality.
-     */
-    public String resultWaterQaulity(final double quality) {
-        if (quality >= THRESHOLD_GOOD) {
-            return "good";
-        } else if (quality >= THRESHOLD_MODERATE) {
-            return "moderate";
-        } else {
-            return "poor";
-        }
-    }
 
     @Override
     public void accept(final Cell cell) {

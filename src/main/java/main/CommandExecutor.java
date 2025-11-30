@@ -113,6 +113,16 @@ public class CommandExecutor {
         scannedAnimals.updateAll(timestamp, matrix);
     }
 
+    /**
+     * Executes the list of commands provided by the input loader.
+     * <p>
+     * Iterates through all commands, handles administrative tasks (like starting/ending
+     * the simulation), updates the environment based on time progression, and delegates
+     * runtime commands (like move, scan, etc.) to specific handlers.
+     * </p>
+     *
+     * @param outputArray The JSON array node where the results of each command will be stored.
+     */
     public void executeCommands(final ArrayNode outputArray) {
         List<CommandInput> commands = inputLoader.getCommands();
 

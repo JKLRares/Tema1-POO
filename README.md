@@ -1,48 +1,69 @@
+# CONSTANTINESCU RARES 323CA
 
+# Ecosystem Simulation & TerraBot Explorer
 
-# Tema 1 POO  - TerraBot
+This project implements a complex ecosystem simulation on a grid-based map, where a robot
+named TerraBot moves around, scans the environment, and interacts with various entities.
 
-<div align="center"><img src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdWZxaTdmdTFoczU5ZW90eTFsN2FwMG5lbDl5dDl5MHBucTB1a2NnZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/voirD51GFZte0/giphy.gif" width="500px"></div>
+## Core Simulation Engine
 
-#### Assignment Link: [https://ocw.cs.pub.ro/courses/poo-ca-cd/teme/tema](https://ocw.cs.pub.ro/courses/poo-ca-cd/teme/tema)
+The simulation is driven by the `CommandExecutor` class, which is the heart of the project.
+Its key method, `executeCommands`, iterates through the input and delegates tasks. It relies
+on `processRuntimeCommand` to handle robot actions like moving or scanning, and the crucial
+`updateEnvironment` method. This method is called periodically to advance the world state—
+triggering plant growth via `grow` and updating entity stats. The entry point is the `Main`
+class, which sets up the `InputLoader` and triggers the `action` method to start the run
 
+## Map & Robot Mechanics
 
-## Skel Structure
+The world is defined by the `Matrix` class, which holds a grid of `Cell` objects.
+ **Matrix**: Uses `placeEntity` to populate the grid
+ **Cell**: Acts as a container. It uses `accept` methods to safely set its contents
+    (`setPlant`, `setAnimal`, etc.) without type casting
+ **Robot**: The `Robot` class explores this map. Its most important method, `moveRobot`,
+    calls `bestNeigh` to scan surroundings. It calculates a safety score using `calculateCost`
+    to avoid hazards like toxic air or enemies
+ **Inventory**: As the robot scans, `Inventory` stores items via `addItem`. It also manages
+    learned facts (when the learnFact command is used) with `addFact` and checks if the robot
+    can perform actions using `checkRequirement` and `applyImprovement` (e.g., `fertilizeSoil`)
+ **ScannedAnimal**: Keeps track of animals the robot has scanned, using `updateAll` to track
+    their movements even when the robot isn't looking
 
-* src/
-    * checker/ - checker files
-    * fileio/ - contains classes used to read data from the json files
-    * main/
-        * Main - the Main class runs the checker on your implementation. Add the entry point to your implementation in it. Run Main to test your implementation from the IDE or from command line.
-        * Test - run the main method from Test class with the name of the input file from the command line and the result will be written
-          to the out.txt file. Thus, you can compare this result with ref.
-* input/ - contains the tests in JSON format
-* ref/ - contains all reference output for the tests in JSON format
+## Entity Hierarchy & Key Behaviors
 
-## Tests
+The `Entity` abstract class is the parent of all map objects. Here is how the specific
+hierarchies break down:
 
-1. test01_initialize_entities 3p
-2. test02_initialize_entities_errors - 2p
-3. test03__move_robot - 5p
-4. test04_move_robot_errors – 2p
-5. test05_env_condition - 2p
-6. test06_update_battery - 3p
-7. test07_update_battery_errors 2p
-8. test08_change_weather - 3p
-9. test09_scan_plant 3p
-10. test10_scan_water 5p
-11. test11_scan_animal - 6p
-12. test12_scan_object_errors – 2p
-13. test13_learn_fact - 4p
-14. test14_improve_environment - 5p
-15. test15_improve_environment_errors – 2p
-16. test16_mid - 6p
-17. test17_multiple_simulations - 3p
-18. test18_multiple_simulations_error - 2p
-19. test19_complex_simple - 6p
-20. test20_complex_errors - 6p
-21. test21_complex_combined - 8p
+### 1. Animals
+The `Animal` abstract class drives behavior with `tryToAct`, which decides if an animal's
+    interactions
+ **Concrete Classes**: `Carnivore`, `Herbivore`, `Omnivore`, `Parasites`, and `Detritivores`
+ **Key Methods**: They all implement `getAttackPossibility`. The `Carnivore` and `Parasites`
+    also override `isPredator` to define their hunting logic
 
+### 2. Plants
+The `Plant` class manages lifecycle stages (Young, Mature, Old) through the `grow` method.
+ **Concrete Classes**: `FloweringPlants`, `Ferns`, `Mosses`, `Algae`, and `Gymnosperms`
+ **Key Methods**: Each subclass defines `getOxygenOutput` (affecting air quality) and
+    `getStuckPossibility` (trapping the robot). They also use `getMaturityModifier` to change
+    their stats over time. `PlantMaturity` is a helper enum here
 
+### 3. Environment (Soil, Air, Water)
+These entities make the planet dynamic
+ **Soil**: The base `Soil` class defines `soilQuality`. Subclasses `ForestSoil`, `SwampSoil`,
+    `TundraSoil`, `DesertSoil`, and `GrasslandSoil` implement `initialSoilQuality` and
+    `probFormula` to calculate distinct bonuses based on parameters like nutrient density or
+    leaf litte
+ **Air**: The `Air` class calculates `airQuality` and `airToxicity`. Subclasses `Montan`,
+    `Temperat`, `Tropical`, `Desert`, and `Polar` implement the `event` method to react to
+    weather changes (e.g., storms or pollen) and `maxScore` to cap their quality
+ **Water**: The `Water` class is unique; it doesn't have subclasses but uses `normalizeIsFrozen`
+    and internal logic to calculate purity and salinity effects on the ecosystem
 
-<div align="center"><img src="https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExeWt2djVodmJsc3E1c2RqdWc3emV4aGU5OWVrd2g5ZDFvNHdnOHY1MSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/HTCp5FBZ3vEXLDoNOm/giphy.gif" width="500px"></div>
+## Interaction Design
+
+The system relies on the interaction between these methods. For instance, in `CommandExecutor`,
+the `updateEnvironment` call might trigger a `Polar` air `event`. This lowers air quality.
+In the next turn, an `Animal` calling `tryToAct` might check that air quality, become "Sick"
+(changing its internal state), and fail to `eatPlant` successfully. This chain of events
+showcases the interactions between the elements of a planet perfectly

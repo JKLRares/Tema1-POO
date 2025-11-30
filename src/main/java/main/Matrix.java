@@ -7,6 +7,13 @@ public class Matrix {
     private Cell[][] grid;
     private int height, width;
 
+    /**
+     * Constructs a new Matrix with the specified dimensions.
+     * Initializes the grid with empty Cells.
+     *
+     * @param rows The number of rows (height) of the matrix.
+     * @param cols The number of columns (width) of the matrix.
+     */
     public Matrix(final int rows, final int cols) {
         this.height = rows;
         this.width = cols;
