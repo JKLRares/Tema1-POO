@@ -28,8 +28,9 @@ public class Inventory {
             List<String> facts = knowledgeBase.get(subject);
             if (!facts.contains(fact)) {
                 facts.add(fact);
+                return true;
             }
-            return true;
+            return false;
         }
         return false;
     }
@@ -43,9 +44,9 @@ public class Inventory {
         if (improvementType.equals("plantVegetation")) {
             requiredFact = "Method to plant " + name;
         } else if (improvementType.equals("fertilizeSoil")) {
-            requiredFact = "Method to fertilize soil with " + name;
+            requiredFact = "Method to fertilize with " + name;
         } else if (improvementType.equals("increaseHumidity")) {
-            requiredFact = "Method to increase humidity with " + name;
+            requiredFact = "Method to increase humidity.";
         } else if (improvementType.equals("waterRetention")) {
             requiredFact = "Method to improve water retention with " + name;
         } else if (improvementType.equals("increaseMoisture")) {
@@ -65,18 +66,19 @@ public class Inventory {
         } else if (type.equals("fertilizeSoil")) {
             double a = 0.3;
             cell.getSoil().setOrganicMatter(cell.getSoil().getOrganicMatter() + a);
-            return "The " + name + " was used to fertilize the soil successfully.";
+            return "The soil was successfully fertilized using " + name;
 
         } else if (type.equals("increaseHumidity")) {
             double a = 0.2;
             cell.getAir().setHumidity(cell.getAir().getHumidity() + a);
             cell.getAir().setAirQual(cell.getAir().airQuality());
-            return "The humidity was increased successfully using " + name + ".";
+            return "The humidity was successfully increased using " + name;
 
         } else if (type.equals("waterRetention")) {
             double a = 0.2;
             cell.getSoil().setWaterRetention(cell.getSoil().getWaterRetention() + a);
             return "Water retention was improved successfully using " + name + ".";
+
         } else if (type.equals("increaseMoisture")) {
             double a = 0.2;
             cell.getSoil().setWaterRetention(cell.getSoil().getWaterRetention() + a);

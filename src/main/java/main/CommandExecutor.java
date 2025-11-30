@@ -15,6 +15,16 @@ import main.air.*;
 import java.util.List;
 
 public class CommandExecutor {
+    private static final double PLANT_GROWTH_INCREMENT = 0.2;
+    private static final double ENV_VAL_INCREMENT = 0.1;
+    private static final double ROUNDING_FACTOR = 10.0;
+    private static final int WEATHER_CHANGE_DURATION = 2;
+    private static final int SCAN_COST = 7;
+    private static final int LEARN_FACT_COST = 2;
+    private static final int IMPROVE_ENV_COST = 10;
+    private static final double PURITY_DIVISOR = 100.0;
+    private static final double INITIAL_GROWTH = 0.0;
+
     private Matrix matrix;
     private Robot robot;
     private final ObjectMapper mapper;
@@ -23,7 +33,10 @@ public class CommandExecutor {
     private Inventory inventory = new Inventory();
 
     private boolean simulationRunning = false;
-    private int simulationIndex = 0, robotChargingTimestamp = 0, changeWeatherTimestamp = 0, previousTimestamp = 0;
+    private int simulationIndex = 0;
+    private int robotChargingTimestamp = 0;
+    private int changeWeatherTimestamp = 0;
+    private int previousTimestamp = 0;
 
     public CommandExecutor(InputLoader inputLoader, ObjectMapper mapper) {
         this.inputLoader = inputLoader;
@@ -35,23 +48,29 @@ public class CommandExecutor {
             for (int y = 0; y < matrix.getHeight(); y++) {
                 Cell cell = matrix.getCell(x, y);
 
-                if (cell.getSoil() != null && cell.getPlant() != null && cell.getPlant().isScanned()) {
-                    cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel() + 0.2);
+                if (cell.getSoil() != null && cell.getPlant() != null
+                        && cell.getPlant().isScanned()) {
+                    cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel()
+                            + PLANT_GROWTH_INCREMENT);
                 }
 
                 if (cell.getWater() != null && cell.getWater().isScanned()) {
                     if (timestamp % 2 != 0) {
                         if (cell.getAir() != null) {
-                            cell.getAir().setHumidity(Math.round((cell.getAir().getHumidity() + 0.1) * 10.0) / 10.0);
+                            double newHum = cell.getAir().getHumidity() + ENV_VAL_INCREMENT;
+                            cell.getAir().setHumidity(Math.round(newHum * ROUNDING_FACTOR)
+                                    / ROUNDING_FACTOR);
                             cell.getAir().setAirQual(cell.getAir().airQuality());
                         }
                         if (cell.getSoil() != null) {
-                            cell.getSoil().setWaterRetention(Math.round((cell.getSoil().getWaterRetention() + 0.1) *
-                                    10.0) / 10.0);
+                            double newRet = cell.getSoil().getWaterRetention() + ENV_VAL_INCREMENT;
+                            cell.getSoil().setWaterRetention(Math.round(newRet * ROUNDING_FACTOR)
+                                    / ROUNDING_FACTOR);
                         }
                     }
                     if (cell.getPlant() != null && cell.getPlant().isScanned()) {
-                        cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel() + 0.2);
+                        cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel()
+                                + PLANT_GROWTH_INCREMENT);
                     }
                 }
                 if (cell.getPlant() != null && cell.getPlant().isScanned()) {
@@ -60,10 +79,13 @@ public class CommandExecutor {
                         cell.setPlant(null);
                     }
                 }
-                if (cell.getPlant() != null && cell.getAir() != null && cell.getPlant().isScanned()) {
-                    double oxygenAdd = cell.getPlant().getOxygenOutput() + cell.getPlant().getMaturityModifier();
-                    cell.getAir().setOxygenLevel(Math.round((cell.getAir().getOxygenLevel() + oxygenAdd) * 10.0) /
-                            10.0);
+                if (cell.getPlant() != null && cell.getAir() != null
+                        && cell.getPlant().isScanned()) {
+                    double oxygenAdd = cell.getPlant().getOxygenOutput()
+                            + cell.getPlant().getMaturityModifier();
+                    double newOx = cell.getAir().getOxygenLevel() + oxygenAdd;
+                    cell.getAir().setOxygenLevel(Math.round(newOx * ROUNDING_FACTOR)
+                            / ROUNDING_FACTOR);
                     cell.getAir().setAirQual(cell.getAir().airQuality());
                 }
             }
@@ -88,9 +110,12 @@ public class CommandExecutor {
                     simulationIndex++;
                     simulationRunning = true;
                     previousTimestamp = timestamp;
+                    this.scannedAnimals = new ScannedAnimal();
+                    this.inventory = new Inventory();
                     resultNode.put("message", "Simulation has started.");
                 } else {
-                    resultNode.put("message", "ERROR: Simulation already started. Cannot perform action");
+                    resultNode.put("message",
+                            "ERROR: Simulation already started. Cannot perform action");
                 }
 
                 resultNode.put("timestamp", timestamp);
@@ -100,7 +125,8 @@ public class CommandExecutor {
 
             if (commandName.equals("endSimulation")) {
                 if (!simulationRunning) {
-                    resultNode.put("message", "ERROR: Simulation not started. Cannot perform action");
+                    resultNode.put("message",
+                            "ERROR: Simulation not started. Cannot perform action");
                 } else {
                     simulationRunning = false;
                     resultNode.put("message", "Simulation has ended.");
@@ -123,11 +149,23 @@ public class CommandExecutor {
             }
             previousTimestamp = timestamp;
 
+            if (timestamp == changeWeatherTimestamp) {
+                for (int x = 0; x < matrix.getWidth(); x++) {
+                    for (int y = 0; y < matrix.getHeight(); y++) {
+                        Cell cell = matrix.getCell(x, y);
+                        if (cell.getAir() != null) {
+                            cell.getAir().setAirQual(cell.getAir().airQuality());
+                        }
+                    }
+                }
+            }
+
             switch (commandName) {
                 case "printEnvConditions":
                     JsonNode conditions = getEnvConditions(robot.getRobotX(), robot.getRobotY());
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         resultNode.set("output", conditions);
                     }
@@ -137,8 +175,9 @@ public class CommandExecutor {
 
                 case "printMap":
                     ArrayNode mapOutput = getMapOutput();
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         resultNode.set("output", mapOutput);
                     }
@@ -147,16 +186,18 @@ public class CommandExecutor {
                     break;
 
                 case "moveRobot":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         boolean moved = robot.moveRobot(matrix);
                         if (moved) {
-                            String message = "The robot has successfully moved to position (" + robot.getRobotX() +
-                                    ", " + robot.getRobotY() + ").";
+                            String message = "The robot has successfully moved to position ("
+                                    + robot.getRobotX() + ", " + robot.getRobotY() + ").";
                             resultNode.put("message", message);
                         } else {
-                            resultNode.put("message", "ERROR: Not enough battery left. Cannot perform action");
+                            resultNode.put("message",
+                                    "ERROR: Not enough battery left. Cannot perform action");
                         }
                     }
                     resultNode.put("timestamp", timestamp);
@@ -164,10 +205,12 @@ public class CommandExecutor {
                     break;
 
                 case "getEnergyStatus":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else if (robot != null) {
-                        String msg = "TerraBot has " + robot.getRobotBattery() + " energy points left.";
+                        String msg = "TerraBot has " + robot.getRobotBattery()
+                                + " energy points left.";
                         resultNode.put("message", msg);
                     }
                     resultNode.put("timestamp", timestamp);
@@ -176,8 +219,9 @@ public class CommandExecutor {
 
                 case "rechargeBattery":
                     int time = cmd.getTimeToCharge();
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         robot.setRobotBattery(robot.getRobotBattery() + time);
                         robotChargingTimestamp = timestamp + time;
@@ -188,8 +232,9 @@ public class CommandExecutor {
                     break;
 
                 case "changeWeatherConditions":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         boolean changed = false;
                         for (int x = 0; x < matrix.getWidth(); x++) {
@@ -200,11 +245,12 @@ public class CommandExecutor {
                                 }
                             }
                         }
-                        if(changed) {
-                            changeWeatherTimestamp = timestamp + 2;
+                        if (changed) {
+                            changeWeatherTimestamp = timestamp + WEATHER_CHANGE_DURATION;
                             resultNode.put("message", "The weather has changed.");
                         } else {
-                            resultNode.put("message", "ERROR: The weather change does not affect the environment. Cannot perform action");
+                            resultNode.put("message", "ERROR: The weather change does not affect "
+                                    + "the environment. Cannot perform action");
                         }
                     }
                     resultNode.put("timestamp", timestamp);
@@ -212,34 +258,38 @@ public class CommandExecutor {
                     break;
 
                 case "scanObject":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
-                        int battery = robot.getRobotBattery() - 7;
+                        int battery = robot.getRobotBattery() - SCAN_COST;
                         boolean checked = false;
                         Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
-                        if(battery < 0) {
+                        if (battery < 0) {
                             resultNode.put("message", "ERROR: Not enough energy to perform action");
                         } else {
-                            if(cmd.getColor().equalsIgnoreCase("none") &&
+                            if (cmd.getColor().equalsIgnoreCase("none") &&
                                     cmd.getSmell().equalsIgnoreCase("none") &&
-                                    cmd.getSound().equalsIgnoreCase("none") && cell.getWater() != null) {
+                                    cmd.getSound().equalsIgnoreCase("none")
+                                    && cell.getWater() != null) {
                                 resultNode.put("message", "The scanned object is water.");
                                 checked = true;
                                 cell.getWater().setScanned(true);
                                 inventory.addItem(cell.getWater().getName());
-                            } else if(!cmd.getColor().equalsIgnoreCase("none") &&
+                            } else if (!cmd.getColor().equalsIgnoreCase("none") &&
                                     !cmd.getSmell().equalsIgnoreCase("none") &&
-                                    cmd.getSound().equalsIgnoreCase("none") && cell.getPlant() != null) {
+                                    cmd.getSound().equalsIgnoreCase("none")
+                                    && cell.getPlant() != null) {
                                 resultNode.put("message", "The scanned object is a plant.");
                                 checked = true;
                                 cell.getPlant().setScanned(true);
                                 inventory.addItem(cell.getPlant().getName());
-                            } else if(!cmd.getColor().equalsIgnoreCase("none") &&
+                            } else if (!cmd.getColor().equalsIgnoreCase("none") &&
                                     !cmd.getSmell().equalsIgnoreCase("none") &&
-                                    !cmd.getSound().equalsIgnoreCase("none") && cell.getAnimal() != null) {
+                                    !cmd.getSound().equalsIgnoreCase("none")
+                                    && cell.getAnimal() != null) {
                                 Animal foundAnimal = cell.getAnimal();
-                                if(!foundAnimal.isScanned()) {
+                                if (!foundAnimal.isScanned()) {
                                     foundAnimal.setScanned(true);
                                     foundAnimal.setScanTimestamp(timestamp);
                                     scannedAnimals.addAnimal(foundAnimal);
@@ -248,8 +298,9 @@ public class CommandExecutor {
                                 resultNode.put("message", "The scanned object is an animal.");
                                 checked = true;
                             }
-                            if(!checked) {
-                                resultNode.put("message", "ERROR: Object not found. Cannot perform action");
+                            if (!checked) {
+                                resultNode.put("message",
+                                        "ERROR: Object not found. Cannot perform action");
                             } else {
                                 robot.setRobotBattery(battery);
                             }
@@ -260,20 +311,19 @@ public class CommandExecutor {
                     break;
 
                 case "learnFact":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
-                        int cost = 2;
-                        if (robot.getRobotBattery() < cost) {
+                        if (robot.getRobotBattery() < LEARN_FACT_COST) {
                             resultNode.put("message",
                                     "ERROR: Not enough battery left. Cannot perform action");
                         } else {
                             String entityName = cmd.getComponents();
                             String factInfo = cmd.getSubject();
 
-                            if (inventory.getCollectedItems().contains(entityName)) {
-                                inventory.addFact(entityName, factInfo);
-                                robot.setRobotBattery(robot.getRobotBattery() - cost);
+                            if (inventory.addFact(entityName, factInfo)) {
+                                robot.setRobotBattery(robot.getRobotBattery() - LEARN_FACT_COST);
                                 resultNode.put("message",
                                         "The fact has been successfully saved in the database.");
                             } else {
@@ -287,15 +337,17 @@ public class CommandExecutor {
                     break;
 
                 case "printKnowledgeBase":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
                         ArrayNode output = mapper.createArrayNode();
                         List<String> items = inventory.getCollectedItems();
                         Map<String, List<String>> knowledgeBase = inventory.getKnowledgeBase();
 
                         for (String item : items) {
-                            if (knowledgeBase.containsKey(item) && !knowledgeBase.get(item).isEmpty()) {
+                            if (knowledgeBase.containsKey(item)
+                                    && !knowledgeBase.get(item).isEmpty()) {
                                 ObjectNode itemNode = mapper.createObjectNode();
                                 itemNode.put("topic", item);
 
@@ -314,24 +366,28 @@ public class CommandExecutor {
                     break;
 
                 case "improveEnvironment":
-                    if(timestamp < robotChargingTimestamp) {
-                        resultNode.put("message", "ERROR: Robot still charging. Cannot perform action");
+                    if (timestamp < robotChargingTimestamp) {
+                        resultNode.put("message",
+                                "ERROR: Robot still charging. Cannot perform action");
                     } else {
-                        int cost = 10;
-                        if(robot.getRobotBattery() < cost) {
+                        if (robot.getRobotBattery() < IMPROVE_ENV_COST) {
                             resultNode.put("message",
                                     "ERROR: Not enough battery left. Cannot perform action");
                         } else {
                             String improvementType = cmd.getImprovementType();
                             String name = cmd.getName();
                             if (!inventory.getCollectedItems().contains(name)) {
-                                resultNode.put("message", "ERROR: Subject not yet saved. Cannot perform action");
+                                resultNode.put("message",
+                                        "ERROR: Subject not yet saved. Cannot perform action");
                             } else if (!inventory.checkRequirement(name, improvementType)) {
-                                resultNode.put("message", "ERROR: Fact not yet saved. Cannot perform action");
+                                resultNode.put("message",
+                                        "ERROR: Fact not yet saved. Cannot perform action");
                             } else {
-                                Cell currentCell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
-                                String successMessage = inventory.applyImprovement(currentCell, improvementType, name);
-                                robot.setRobotBattery(robot.getRobotBattery() - 10);
+                                Cell currentCell = matrix.getCell(robot.getRobotX(),
+                                        robot.getRobotY());
+                                String successMessage = inventory.applyImprovement(currentCell,
+                                        improvementType, name);
+                                robot.setRobotBattery(robot.getRobotBattery() - IMPROVE_ENV_COST);
                                 resultNode.put("message", successMessage);
                             }
                         }
@@ -340,16 +396,7 @@ public class CommandExecutor {
                     outputArray.add(resultNode);
                     break;
             }
-            if (timestamp == changeWeatherTimestamp) {
-                for (int x = 0; x < matrix.getWidth(); x++) {
-                    for (int y = 0; y < matrix.getHeight(); y++) {
-                        Cell cell = matrix.getCell(x, y);
-                        if (cell.getAir() != null) {
-                            cell.getAir().setAirQual(cell.getAir().airQuality());
-                        }
-                    }
-                }
-            }
+
         }
     }
 
@@ -362,16 +409,21 @@ public class CommandExecutor {
         Matrix newMatrix = new Matrix(rows, cols);
         TerritorySectionParamsInput sections = params.getTerritorySectionParams();
 
-        if (sections.getSoil() != null)
+        if (sections.getSoil() != null) {
             parseSoils(sections.getSoil(), newMatrix);
-        if (sections.getPlants() != null)
+        }
+        if (sections.getPlants() != null) {
             parsePlants(sections.getPlants(), newMatrix);
-        if (sections.getAnimals() != null)
+        }
+        if (sections.getAnimals() != null) {
             parseAnimals(sections.getAnimals(), newMatrix);
-        if (sections.getWater() != null)
+        }
+        if (sections.getWater() != null) {
             parseWater(sections.getWater(), newMatrix);
-        if (sections.getAir() != null)
+        }
+        if (sections.getAir() != null) {
             parseAir(sections.getAir(), newMatrix);
+        }
 
         return newMatrix;
     }
@@ -382,27 +434,29 @@ public class CommandExecutor {
             for (PairInput loc : entry.getSections()) {
                 Soil newSoil = null;
                 if (type.equalsIgnoreCase("ForestSoil")) {
-                    newSoil = new ForestSoil(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type, entry.getNitrogen(), entry.getWaterRetention(), entry.getSoilpH(),
-                            entry.getOrganicMatter(), entry.getLeafLitter());
+                    newSoil = new ForestSoil(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
+                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getLeafLitter());
                 } else if (type.equalsIgnoreCase("SwampSoil")) {
-                    newSoil = new SwampSoil(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type, entry.getNitrogen(), entry.getWaterRetention(), entry.getSoilpH(),
-                            entry.getOrganicMatter(), entry.getWaterLogging());
+                    newSoil = new SwampSoil(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
+                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getWaterLogging());
                 } else if (type.equalsIgnoreCase("TundraSoil")) {
-                    newSoil = new TundraSoil(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type, entry.getNitrogen(), entry.getWaterRetention(), entry.getSoilpH(),
-                            entry.getOrganicMatter(), entry.getPermafrostDepth());
+                    newSoil = new TundraSoil(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
+                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getPermafrostDepth());
                 } else if (type.equalsIgnoreCase("DesertSoil")) {
-                    newSoil = new DesertSoil(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type, entry.getNitrogen(), entry.getWaterRetention(), entry.getSoilpH(),
-                            entry.getOrganicMatter(), entry.getSalinity());
+                    newSoil = new DesertSoil(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
+                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getSalinity());
                 } else if (type.equalsIgnoreCase("GrasslandSoil")) {
-                    newSoil = new GrasslandSoil(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type, entry.getNitrogen(), entry.getWaterRetention(), entry.getSoilpH(),
-                            entry.getOrganicMatter(), entry.getRootDensity());
+                    newSoil = new GrasslandSoil(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
+                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getRootDensity());
                 }
-                if (newSoil != null) matrix.placeEntity(newSoil);
+                if (newSoil != null) {
+                    matrix.placeEntity(newSoil);
+                }
             }
         }
     }
@@ -415,22 +469,24 @@ public class CommandExecutor {
             for (PairInput loc : entry.getSections()) {
                 Plant newPlant = null;
                 if (typeUpper.contains("FLOWER")) {
-                    newPlant = new FloweringPlants(loc.getX(), loc.getY(), type, entry.getName(), entry.getMass(),
-                            0.0, "YOUNG", false);
+                    newPlant = new FloweringPlants(loc.getX(), loc.getY(), type, entry.getName(),
+                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 } else if (typeUpper.contains("FERN")) {
-                    newPlant = new Ferns(loc.getX(), loc.getY(), type, entry.getName(), entry.getMass(),
-                            0.0, "YOUNG", false);
+                    newPlant = new Ferns(loc.getX(), loc.getY(), type, entry.getName(),
+                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 } else if (typeUpper.contains("ALGAE")) {
-                    newPlant = new Algae(loc.getX(), loc.getY(), type, entry.getName(), entry.getMass(),
-                            0.0, "YOUNG", false);
+                    newPlant = new Algae(loc.getX(), loc.getY(), type, entry.getName(),
+                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 } else if (typeUpper.contains("MOSS")) {
-                    newPlant = new Mosses(loc.getX(), loc.getY(), type, entry.getName(), entry.getMass(),
-                            0.0, "YOUNG", false);
+                    newPlant = new Mosses(loc.getX(), loc.getY(), type, entry.getName(),
+                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 } else if (typeUpper.contains("GYMNOSPERM")) {
-                    newPlant = new Gymnosperms(loc.getX(), loc.getY(), type, entry.getName(), entry.getMass(),
-                            0.0, "YOUNG", false);
+                    newPlant = new Gymnosperms(loc.getX(), loc.getY(), type, entry.getName(),
+                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 }
-                if (newPlant != null) matrix.placeEntity(newPlant);
+                if (newPlant != null) {
+                    matrix.placeEntity(newPlant);
+                }
             }
         }
     }
@@ -443,35 +499,38 @@ public class CommandExecutor {
             for (PairInput loc : entry.getSections()) {
                 Animal newAnimal = null;
                 if (typeUpper.contains("HERBIVORE")) {
-                    newAnimal = new Herbivore(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type);
+                    newAnimal = new Herbivore(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type);
                 } else if (typeUpper.contains("CARNIVORE")) {
-                    newAnimal = new Carnivore(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type);
+                    newAnimal = new Carnivore(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type);
                 } else if (typeUpper.contains("OMNIVORE")) {
-                    newAnimal = new Omnivore(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type);
+                    newAnimal = new Omnivore(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type);
                 } else if (typeUpper.contains("DETRITIVORE")) {
                     newAnimal = new Detritivores(loc.getX(), loc.getY(), entry.getMass(), false,
                             entry.getName(), type);
                 } else if (typeUpper.contains("PARASITE")) {
-                    newAnimal = new Parasites(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                            type);
+                    newAnimal = new Parasites(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type);
                 }
-                if (newAnimal != null) matrix.placeEntity(newAnimal);
+                if (newAnimal != null) {
+                    matrix.placeEntity(newAnimal);
+                }
             }
         }
     }
 
     private void parseWater(List<WaterInput> list, Matrix matrix) {
         for (WaterInput entry : list) {
-            double waterQuality = entry.getPurity() / 100.0;
+            double waterQuality = entry.getPurity() / PURITY_DIVISOR;
             int frozenScore = 0;
 
             for (PairInput loc : entry.getSections()) {
-                Water newWater = new Water(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(),
-                        entry.getType(), entry.getSalinity(), entry.getPH(), entry.getPurity(), entry.getTurbidity(),
-                        entry.getContaminantIndex(), waterQuality, entry.isFrozen(), frozenScore);
+                Water newWater = new Water(loc.getX(), loc.getY(), entry.getMass(), false,
+                        entry.getName(), entry.getType(), entry.getSalinity(), entry.getPH(),
+                        entry.getPurity(), entry.getTurbidity(), entry.getContaminantIndex(),
+                        waterQuality, entry.isFrozen(), frozenScore);
                 matrix.placeEntity(newWater);
             }
         }
@@ -485,22 +544,29 @@ public class CommandExecutor {
                 double temp = entry.getTemperature();
 
                 if (type.equalsIgnoreCase("MountainAir")) {
-                    newAir = new Montan(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(), type,
-                            entry.getHumidity(), temp, entry.getOxygenLevel(), entry.getAltitude());
+                    newAir = new Montan(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getHumidity(), temp,
+                            entry.getOxygenLevel(), entry.getAltitude());
                 } else if (type.equalsIgnoreCase("TemperateAir")) {
-                    newAir = new Temperat(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(), type,
-                            entry.getHumidity(), temp, entry.getOxygenLevel(), entry.getPollenLevel());
+                    newAir = new Temperat(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getHumidity(), temp,
+                            entry.getOxygenLevel(), entry.getPollenLevel());
                 } else if (type.equalsIgnoreCase("TropicalAir")) {
-                    newAir = new Tropical(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(), type,
-                            entry.getHumidity(), temp, entry.getOxygenLevel(), entry.getCo2Level());
+                    newAir = new Tropical(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getHumidity(), temp,
+                            entry.getOxygenLevel(), entry.getCo2Level());
                 } else if (type.equalsIgnoreCase("DesertAir")) {
-                    newAir = new Desert(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(), type,
-                            entry.getHumidity(), temp, entry.getOxygenLevel(), entry.getDustParticles());
+                    newAir = new Desert(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getHumidity(), temp,
+                            entry.getOxygenLevel(), entry.getDustParticles());
                 } else if (type.equalsIgnoreCase("PolarAir")) {
-                    newAir = new Polar(loc.getX(), loc.getY(), entry.getMass(), false, entry.getName(), type,
-                            entry.getHumidity(), temp, entry.getOxygenLevel(), entry.getIceCrystalConcentration());
+                    newAir = new Polar(loc.getX(), loc.getY(), entry.getMass(), false,
+                            entry.getName(), type, entry.getHumidity(), temp,
+                            entry.getOxygenLevel(), entry.getIceCrystalConcentration());
                 }
-                if (newAir != null) matrix.placeEntity(newAir);
+                if (newAir != null) {
+                    matrix.placeEntity(newAir);
+                }
             }
         }
     }
@@ -523,7 +589,8 @@ public class CommandExecutor {
 
             ObjectNode fullDump = mapper.valueToTree(s);
             removeCommonFields(fullDump);
-            fullDump.remove(List.of("nitrogen", "waterRetention", "soilph", "organicMatter", "soilQuality"));
+            fullDump.remove(List.of("nitrogen", "waterRetention", "soilph", "organicMatter",
+                    "soilQuality"));
             sNode.setAll(fullDump);
 
             envNode.set("soil", sNode);
@@ -565,8 +632,8 @@ public class CommandExecutor {
             airNode.put("airQuality", a.getAirQual());
             ObjectNode fullDump = mapper.valueToTree(a);
             removeCommonFields(fullDump);
-            fullDump.remove(List.of("humidity", "temperature", "oxygenLevel", "airQuality", "airQual", "dustParticles",
-                    "season", "rainfall"));
+            fullDump.remove(List.of("humidity", "temperature", "oxygenLevel", "airQuality",
+                    "airQual", "dustParticles", "season", "rainfall"));
             airNode.setAll(fullDump);
             envNode.set("air", airNode);
         }
@@ -590,12 +657,15 @@ public class CommandExecutor {
                 sectionNode.set("section", coords);
 
                 int count = 0;
-                if (cell.getPlant() != null)
+                if (cell.getPlant() != null) {
                     count++;
-                if (cell.getAnimal() != null)
+                }
+                if (cell.getAnimal() != null) {
                     count++;
-                if (cell.getWater() != null)
+                }
+                if (cell.getWater() != null) {
                     count++;
+                }
                 sectionNode.put("totalNrOfObjects", count);
 
                 sectionNode.put("airQuality", cell.getAir().resultAirQaulity());
@@ -614,9 +684,11 @@ public class CommandExecutor {
         node.remove("type");
         node.remove("name");
         node.remove("mass");
-        if (node.has("specificType"))
+        if (node.has("specificType")) {
             node.remove("specificType");
-        if (node.has("variant"))
+        }
+        if (node.has("variant")) {
             node.remove("variant");
+        }
     }
 }

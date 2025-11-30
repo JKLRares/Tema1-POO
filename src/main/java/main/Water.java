@@ -1,45 +1,67 @@
 package main;
+
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter @Setter
-public class Water extends Entity{
-    private double salinity, ph, purity, turbidity, contaminantIndex, waterQuality;
+public class Water extends Entity {
+    private static final double SALINITY_DIVISOR = 350.0;
+    private static final double PH_TARGET = 7.5;
+    private static final double NORMALIZE_100 = 100.0;
+    private static final double QUALITY_WEIGHT_PURITY = 0.3;
+    private static final double QUALITY_WEIGHT_PH = 0.2;
+    private static final double QUALITY_WEIGHT_SALINITY = 0.15;
+    private static final double QUALITY_WEIGHT_TURBIDITY = 0.1;
+    private static final double QUALITY_WEIGHT_CONTAMINANT = 0.15;
+    private static final double QUALITY_WEIGHT_FROZEN = 0.2;
+    private static final double THRESHOLD_GOOD = 70.0;
+    private static final double THRESHOLD_MODERATE = 40.0;
+    private static final int FROZEN_VALUE = 1;
+    private static final int NOT_FROZEN_VALUE = 0;
+
+    private double salinity;
+    private double ph;
+    private double purity;
+    private double turbidity;
+    private double contaminantIndex;
+    private double waterQuality;
     private boolean isFrozen;
     private int frozenScore;
 
-    public Water(int x, int y, double mass, boolean scanned, String name, String type, double salinity, double ph,
-                 double purity, double turbidity, double contaminantIndex, double waterQuality, boolean isFrozen,
-                 int frozenScore) {
+    public Water(int x, int y, double mass, boolean scanned, String name, String type,
+                 double salinity, double ph, double purity, double turbidity,
+                 double contaminantIndex, double waterQuality, boolean isFrozen, int frozenScore) {
         super(x, y, mass, scanned, name, type);
-        this.salinity = 1 - (salinity / 350);
-        this.ph = 1 - Math.abs(ph - 7.5) / 7.5;
-        this.purity = purity / 100;
-        this.turbidity = 1 - (turbidity / 100);
-        this.contaminantIndex = 1 - (contaminantIndex / 100);
+        this.salinity = 1 - (salinity / SALINITY_DIVISOR);
+        this.ph = 1 - Math.abs(ph - PH_TARGET) / PH_TARGET;
+        this.purity = purity / NORMALIZE_100;
+        this.turbidity = 1 - (turbidity / NORMALIZE_100);
+        this.contaminantIndex = 1 - (contaminantIndex / NORMALIZE_100);
         this.frozenScore = normalizeIsFrozen(isFrozen);
-        this.waterQuality = (0.3 * purity + 0.2 * ph + 0.15 * salinity + 0.1 * turbidity + 0.15 * contaminantIndex +
-                0.2 * frozenScore) * 100;
+        this.waterQuality = (QUALITY_WEIGHT_PURITY * this.purity
+                + QUALITY_WEIGHT_PH * this.ph
+                + QUALITY_WEIGHT_SALINITY * this.salinity
+                + QUALITY_WEIGHT_TURBIDITY * this.turbidity
+                + QUALITY_WEIGHT_CONTAMINANT * this.contaminantIndex
+                + QUALITY_WEIGHT_FROZEN * this.frozenScore) * NORMALIZE_100;
     }
 
     private int normalizeIsFrozen(boolean isFrozen) {
-        if(isFrozen) {
-            return 1;
+        if (isFrozen) {
+            return FROZEN_VALUE;
         }
-        return 0;
+        return NOT_FROZEN_VALUE;
     }
 
     public String resultWaterQaulity(double waterQuality) {
-        if(waterQuality >= 70) {
+        if (waterQuality >= THRESHOLD_GOOD) {
             return "good";
-        } else if(waterQuality >= 40) {
+        } else if (waterQuality >= THRESHOLD_MODERATE) {
             return "moderate";
         } else {
             return "poor";
         }
     }
-
-    // creste air soil si plant
 
     @Override
     public EntityType getEntityType() {

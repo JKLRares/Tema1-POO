@@ -21,10 +21,13 @@ public class Desert extends Air {
 
     @Override
     public boolean event(CommandInput cmd) {
-        this.desertStorm = cmd.isDesertStorm();
-        double a = 30, b = 0;
-        setAirQual(getAirQual() - (this.desertStorm ? 30 : 0));
-        return true;
+        if (cmd.isDesertStorm()) {
+            this.desertStorm = cmd.isDesertStorm();
+            double a = 30, b = 0;
+            setAirQual(getAirQual() - (this.desertStorm ? 30 : 0));
+            return true;
+        }
+        return false;
     }
 
     @Override
