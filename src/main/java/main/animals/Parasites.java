@@ -4,13 +4,21 @@ import main.Animal;
 import lombok.Getter;
 
 @Getter
-public class Parasites extends Animal {
-    public Parasites(int x, int y, double mass, boolean scanned, String name, String type) {
+public final class Parasites extends Animal {
+    private static final int ATTACK_POSSIBILITY = 10;
+
+    public Parasites(final int x, final int y, final double mass, final boolean scanned,
+                     final String name, final String type) {
         super(x, y, mass, scanned, name, type);
     }
 
     @Override
     public int getAttackPossibility() {
-        return 10;
+        return ATTACK_POSSIBILITY;
+    }
+
+    @Override
+    public boolean isPredator() {
+        return true;
     }
 }

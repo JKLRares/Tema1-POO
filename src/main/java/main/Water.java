@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Getter @Setter
-public class Water extends Entity {
+public final class Water extends Entity {
     private static final double SALINITY_DIVISOR = 350.0;
     private static final double PH_TARGET = 7.5;
     private static final double NORMALIZE_100 = 100.0;
@@ -28,9 +28,10 @@ public class Water extends Entity {
     private boolean isFrozen;
     private int frozenScore;
 
-    public Water(int x, int y, double mass, boolean scanned, String name, String type,
-                 double salinity, double ph, double purity, double turbidity,
-                 double contaminantIndex, double waterQuality, boolean isFrozen, int frozenScore) {
+    public Water(final int x, final int y, final double mass, final boolean scanned,
+                 final String name, final String type, final double salinity, final double ph,
+                 final double purity, final double turbidity, final double contaminantIndex,
+                 final double waterQuality, final boolean isFrozen, final int frozenScore) {
         super(x, y, mass, scanned, name, type);
         this.salinity = 1 - (salinity / SALINITY_DIVISOR);
         this.ph = 1 - Math.abs(ph - PH_TARGET) / PH_TARGET;
@@ -46,17 +47,22 @@ public class Water extends Entity {
                 + QUALITY_WEIGHT_FROZEN * this.frozenScore) * NORMALIZE_100;
     }
 
-    private int normalizeIsFrozen(boolean isFrozen) {
-        if (isFrozen) {
+    private int normalizeIsFrozen(final boolean frozen) {
+        if (frozen) {
             return FROZEN_VALUE;
         }
         return NOT_FROZEN_VALUE;
     }
 
-    public String resultWaterQaulity(double waterQuality) {
-        if (waterQuality >= THRESHOLD_GOOD) {
+    /**
+     * Determines the quality text (good, moderate, poor) based on the score.
+     * @param quality the calculated water quality score.
+     * @return the string representation of quality.
+     */
+    public String resultWaterQaulity(final double quality) {
+        if (quality >= THRESHOLD_GOOD) {
             return "good";
-        } else if (waterQuality >= THRESHOLD_MODERATE) {
+        } else if (quality >= THRESHOLD_MODERATE) {
             return "moderate";
         } else {
             return "poor";
@@ -64,7 +70,7 @@ public class Water extends Entity {
     }
 
     @Override
-    public EntityType getEntityType() {
-        return EntityType.WATER;
+    public void accept(final Cell cell) {
+        cell.setWater(this);
     }
 }

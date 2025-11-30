@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Getter @Setter
-public abstract class Animal extends Alive {
+public abstract class Animal extends Entity {
     private static final String STATE_HUNGRY = "hungry";
     private static final String STATE_SICK = "sick";
     private static final String STATE_WELL_FED = "well-fed";
@@ -21,6 +21,7 @@ public abstract class Animal extends Alive {
     private static final double INTAKE_RATE = 0.08;
     private static final double ORGANIC_LOW = 0.5;
     private static final double ORGANIC_HIGH = 0.8;
+    private static final int DIRECTION_COUNT = 4;
 
     private boolean fed = false;
     private String animalState = STATE_HUNGRY;
@@ -29,12 +30,18 @@ public abstract class Animal extends Alive {
     private int scanTimestamp = 0;
     private int foodEatenCount = 0;
 
-    public Animal(int x, int y, double mass, boolean scanned, String name, String type) {
+    public Animal(final int x, final int y, final double mass, final boolean scanned,
+                  final String name, final String type) {
         super(x, y, mass, scanned, name, type);
         this.attackProb = (ATTACK_BASE - getAttackPossibility()) / ATTACK_DIVISOR;
     }
 
-    public void tryToAct(Matrix map, int timestamp) {
+    /**
+     * Attempts to perform an action (move, eat, etc.) for the animal.
+     * @param map the game map.
+     * @param timestamp the current simulation time.
+     */
+    public final void tryToAct(final Matrix map, final int timestamp) {
         System.out.println("DEBUG [Time " + timestamp + "] " + getName() + " at (" + getX()
                 + "," + getY() + "): TryToAct called. IsScanned: " + isScanned());
         if (isScanned()) {
@@ -48,21 +55,21 @@ public abstract class Animal extends Alive {
         }
     }
 
-    private Cell findBestNeighbor(Matrix map) {
+    private Cell findBestNeighbor(final Matrix map) {
         int[] vx = {0, 1, 0, -1};
         int[] vy = {1, 0, -1, 0};
 
         Cell best = null;
         double bestScore = -1.0;
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < DIRECTION_COUNT; i++) {
             int nx = getX() + vx[i];
             int ny = getY() + vy[i];
             if (nx >= 0 && nx < map.getWidth() && ny >= 0 && ny < map.getHeight()) {
                 Cell neighbor = map.getCell(nx, ny);
                 double score = calculateScore(neighbor);
-                boolean isCarnivore = getType().equalsIgnoreCase(TYPE_CARNIVORES) ||
-                        getType().equalsIgnoreCase(TYPE_PARASITES);
+                boolean isCarnivore = getType().equalsIgnoreCase(TYPE_CARNIVORES)
+                        || getType().equalsIgnoreCase(TYPE_PARASITES);
 
                 if (!isCarnivore && neighbor.getAnimal() != null) {
                     continue;
@@ -78,7 +85,12 @@ public abstract class Animal extends Alive {
         return best;
     }
 
-    public void move(Matrix map, Cell best) {
+    /**
+     * Moves the animal to the specified destination cell.
+     * @param map the game map.
+     * @param best the destination cell.
+     */
+    public final void move(final Matrix map, final Cell best) {
         Cell oldCell = map.getCell(getX(), getY());
         oldCell.setAnimal(null);
         setX(best.getX());
@@ -86,14 +98,16 @@ public abstract class Animal extends Alive {
         best.setAnimal(this);
     }
 
-    private double calculateScore(Cell cell) {
+    private double calculateScore(final Cell cell) {
         boolean hasPlant = cell.getPlant() != null && cell.getPlant().isScanned();
         boolean hasWater = cell.getWater() != null && cell.getWater().isScanned();
         if (cell.getPlant() != null || cell.getWater() != null) {
-            String plantStatus = (cell.getPlant() == null) ? "None" :
-                    (cell.getPlant().getName() + " (Scanned=" + cell.getPlant().isScanned() + ")");
-            String waterStatus = (cell.getWater() == null) ? "None" :
-                    (cell.getWater().getName() + " (Scanned=" + cell.getWater().isScanned() + ")");
+            String plantStatus = (cell.getPlant() == null) ? "None"
+                    : (cell.getPlant().getName() + " (Scanned="
+                    + cell.getPlant().isScanned() + ")");
+            String waterStatus = (cell.getWater() == null) ? "None"
+                    : (cell.getWater().getName() + " (Scanned="
+                    + cell.getWater().isScanned() + ")");
 
             System.out.println("DEBUG:     Inside (" + cell.getX() + "," + cell.getY()
                     + ") saw: Plant=[" + plantStatus + "] Water=[" + waterStatus + "]");
@@ -108,14 +122,19 @@ public abstract class Animal extends Alive {
         return MIN_SCORE;
     }
 
-    @Override
-    public EntityType getEntityType() {
-        return EntityType.ANIMAL;
-    }
-
+    /**
+     * Gets the attack probability of the animal.
+     * @return the attack probability.
+     */
     public abstract int getAttackPossibility();
 
-    public void interact(Cell cell, Matrix map, Cell best) {
+    /**
+     * Handles interaction with the environment (eating, drinking, etc.).
+     * @param cell the current cell.
+     * @param map the game map.
+     * @param best the target cell.
+     */
+    public final void interact(final Cell cell, final Matrix map, final Cell best) {
         if (fed && !animalState.equals(STATE_SICK) && cell.getSoil() != null) {
             cell.getSoil().setOrganicMatter(cell.getSoil().getOrganicMatter() + nextOrganicMatter);
         }
@@ -125,12 +144,10 @@ public abstract class Animal extends Alive {
         Plant plantOnCell = best.getPlant();
         Water waterOnCell = best.getWater();
 
-        boolean isPredator = getType().equalsIgnoreCase(TYPE_CARNIVORE) ||
-                getType().equalsIgnoreCase(TYPE_PARASITES);
-        boolean victimExists = potentialVictim != null
-                && potentialVictim.getEntityType() == EntityType.ANIMAL;
+        boolean isCarnivore = this.isPredator();
+        boolean victimExists = potentialVictim != null;
 
-        if (victimExists && isPredator) {
+        if (victimExists && isCarnivore) {
             eatAnimal(cell, map, best);
             fed = true;
             foodEatenCount++;
@@ -177,17 +194,17 @@ public abstract class Animal extends Alive {
         }
     }
 
-    private void eatAnimal(Cell cell, Matrix map, Cell victim) {
+    private void eatAnimal(final Cell cell, final Matrix map, final Cell victim) {
         setMass(getMass() + victim.getAnimal().getMass());
         victim.setAnimal(null);
     }
 
-    private void eatPlant(Cell cell, Matrix map, Cell victim) {
+    private void eatPlant(final Cell cell, final Matrix map, final Cell victim) {
         setMass((getMass() + victim.getPlant().getMass()));
         victim.setPlant(null);
     }
 
-    private void drink(Cell cell, Matrix map, Cell victim) {
+    private void drink(final Cell cell, final Matrix map, final Cell victim) {
         double waterToDrink = Math.min(getMass() * INTAKE_RATE, victim.getWater().getMass());
         victim.getWater().setMass(victim.getWater().getMass() - waterToDrink);
         setMass(getMass() + waterToDrink);
@@ -196,8 +213,12 @@ public abstract class Animal extends Alive {
         }
     }
 
-    @Override
-    public void die(Entity entity) {
+    public boolean isPredator() {
+        return false;
+    }
 
+    @Override
+    public void accept(final Cell cell) {
+        cell.setAnimal(this);
     }
 }

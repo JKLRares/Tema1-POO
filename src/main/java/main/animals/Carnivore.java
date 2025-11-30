@@ -4,13 +4,21 @@ import main.Animal;
 import lombok.Getter;
 
 @Getter
-public class Carnivore extends Animal {
-    public Carnivore(int x, int y, double mass, boolean scanned, String name, String type) {
+public final class Carnivore extends Animal {
+    private static final int ATTACK_POSSIBILITY = 30;
+
+    public Carnivore(final int x, final int y, final double mass, final boolean scanned,
+                     final String name, final String type) {
         super(x, y, mass, scanned, name, type);
     }
 
     @Override
     public int getAttackPossibility() {
-        return 30;
+        return ATTACK_POSSIBILITY;
+    }
+
+    @Override
+    public boolean isPredator() {
+        return true;
     }
 }

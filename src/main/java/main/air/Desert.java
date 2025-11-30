@@ -1,14 +1,24 @@
 package main.air;
+
 import main.Air;
 import lombok.Getter;
 import fileio.CommandInput;
 
 @Getter
-public class Desert extends Air {
+public final class Desert extends Air {
+    private static final double OXYGEN_WEIGHT = 2.0;
+    private static final double DUST_PENALTY = 0.2;
+    private static final double TEMP_PENALTY = 0.3;
+    private static final double STORM_PENALTY_VAL = 30.0;
+    private static final int MAX_SCORE = 65;
+
     private final double dustParticles;
     private boolean desertStorm = false;
-    public Desert(int x, int y, double mass, boolean scanned, String name, String type, double humidity,
-                  double temperature, double oxygenLevel, double dustParticles) {
+
+    public Desert(final int x, final int y, final double mass, final boolean scanned,
+                  final String name, final String type, final double humidity,
+                  final double temperature, final double oxygenLevel,
+                  final double dustParticles) {
         super(x, y, mass, scanned, name, type, humidity, temperature, oxygenLevel);
         this.dustParticles = dustParticles;
         setAirQual(airQuality());
@@ -16,15 +26,15 @@ public class Desert extends Air {
 
     @Override
     public double initialAirQuality() {
-        return (getOxygenLevel() * 2) - (dustParticles * 0.2) - (getTemperature() * 0.3);
+        return (getOxygenLevel() * OXYGEN_WEIGHT) - (dustParticles * DUST_PENALTY)
+                - (getTemperature() * TEMP_PENALTY);
     }
 
     @Override
-    public boolean event(CommandInput cmd) {
+    public boolean event(final CommandInput cmd) {
         if (cmd.isDesertStorm()) {
             this.desertStorm = cmd.isDesertStorm();
-            double a = 30, b = 0;
-            setAirQual(getAirQual() - (this.desertStorm ? 30 : 0));
+            setAirQual(getAirQual() - (this.desertStorm ? STORM_PENALTY_VAL : 0));
             return true;
         }
         return false;
@@ -32,6 +42,6 @@ public class Desert extends Air {
 
     @Override
     public int maxScore() {
-        return 65;
+        return MAX_SCORE;
     }
 }

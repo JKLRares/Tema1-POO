@@ -16,8 +16,9 @@ public abstract class Soil extends Entity {
     private double soilph;
     private double organicMatter;
 
-    public Soil(int x, int y, double mass, boolean scanned, String name, String type,
-                double nitrogen, double waterRetention, double soilph, double organicMatter) {
+    public Soil(final int x, final int y, final double mass, final boolean scanned,
+                final String name, final String type, final double nitrogen,
+                final double waterRetention, final double soilph, final double organicMatter) {
         super(x, y, mass, scanned, name, type);
         this.nitrogen = nitrogen;
         this.waterRetention = waterRetention;
@@ -25,18 +26,33 @@ public abstract class Soil extends Entity {
         this.organicMatter = organicMatter;
     }
 
-    // interactiuni cu plant si water
-
+    /**
+     * Calculates the initial quality of the soil based on its properties.
+     * @return the initial soil quality value.
+     */
     public abstract double initialSoilQuality();
+
+    /**
+     * Calculates the probability formula for the soil.
+     * @return the probability value.
+     */
     public abstract double probFormula();
 
-    public double soilQuality() {
+    /**
+     * Calculates the normalized soil quality score.
+     * @return the soil quality score.
+     */
+    public final double soilQuality() {
         double score = this.initialSoilQuality();
         double normalizeScore = Math.max(MIN_SCORE, Math.min(MAX_SCORE, score));
         return Math.round(normalizeScore * ROUNDING_FACTOR) / ROUNDING_FACTOR;
     }
 
-    public String resultSoilQuality() {
+    /**
+     * Determines the textual representation of the soil quality (good, moderate, poor).
+     * @return a string representing the soil quality category.
+     */
+    public final String resultSoilQuality() {
         double score = this.soilQuality();
         if (score >= THRESHOLD_GOOD) {
             return "good";
@@ -47,8 +63,13 @@ public abstract class Soil extends Entity {
         }
     }
 
+    public void updateWaterRetention(final double retentionInc, final double roundingFactor) {
+        double newRet = this.waterRetention + retentionInc;
+        this.waterRetention = Math.round(newRet * roundingFactor) / roundingFactor;
+    }
+
     @Override
-    public EntityType getEntityType() {
-        return EntityType.SOIL;
+    public void accept(final Cell cell) {
+        cell.setSoil(this);
     }
 }

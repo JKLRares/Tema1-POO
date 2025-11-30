@@ -1,30 +1,40 @@
 package main.air;
+
 import main.Air;
 import lombok.Getter;
 import fileio.CommandInput;
 
 @Getter
-public class Tropical extends Air {
+public final class Tropical extends Air {
+    private static final double OXYGEN_WEIGHT = 2.0;
+    private static final double HUMIDITY_WEIGHT = 0.5;
+    private static final double CO2_PENALTY = 0.01;
+    private static final double RAINFALL_BONUS = 0.3;
+    private static final int MAX_SCORE = 82;
+    private static final double CO2_ROUNDING = 100.0;
+
     private final double co2Level;
     private double rainfall;
-    public Tropical(int x, int y, double mass, boolean scanned, String name, String type, double humidity,
-                    double temperature, double oxygenLevel, double co2Level) {
+
+    public Tropical(final int x, final int y, final double mass, final boolean scanned,
+                    final String name, final String type, final double humidity,
+                    final double temperature, final double oxygenLevel, final double co2Level) {
         super(x, y, mass, scanned, name, type, humidity, temperature, oxygenLevel);
-        this.co2Level = Math.round(co2Level * 100.0) / 100.0;
+        this.co2Level = Math.round(co2Level * CO2_ROUNDING) / CO2_ROUNDING;
         setAirQual(airQuality());
     }
 
     @Override
     public double initialAirQuality() {
-        return (getOxygenLevel() * 2) + (getHumidity() * 0.5) - (co2Level * 0.01);
+        return (getOxygenLevel() * OXYGEN_WEIGHT) + (getHumidity() * HUMIDITY_WEIGHT)
+                - (co2Level * CO2_PENALTY);
     }
 
     @Override
-    public boolean event(CommandInput cmd) {
+    public boolean event(final CommandInput cmd) {
         if (cmd.getRainfall() > 0) {
             rainfall = cmd.getRainfall();
-            double a = 0.3;
-            setAirQual(getAirQual() + (rainfall * 0.3));
+            setAirQual(getAirQual() + (rainfall * RAINFALL_BONUS));
             return true;
         }
         return false;
@@ -32,6 +42,6 @@ public class Tropical extends Air {
 
     @Override
     public int maxScore() {
-        return 82;
+        return MAX_SCORE;
     }
 }

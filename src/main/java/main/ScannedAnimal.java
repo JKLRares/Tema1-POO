@@ -1,7 +1,7 @@
 package main;
 
 public class ScannedAnimal {
-    private Animal[] scannedAnimals;
+    private final Animal[] scannedAnimals;
     private int count;
 
     public ScannedAnimal() {
@@ -22,7 +22,7 @@ public class ScannedAnimal {
         }
     }
 
-    public void updateAll(int currentTimestamp, Matrix map) {
+    public void updateAll(final int currentTimestamp, final Matrix map) {
         for (int i = 0; i < count; i++) {
             Animal animal = scannedAnimals[i];
 

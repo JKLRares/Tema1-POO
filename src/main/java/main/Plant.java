@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Getter @Setter
-public abstract class Plant extends Alive {
+public abstract class Plant extends Entity {
     private static final String LEVEL_YOUNG = "YOUNG";
     private static final String LEVEL_MATURE = "MATURE";
     private static final String LEVEL_OLD = "OLD";
@@ -23,8 +23,8 @@ public abstract class Plant extends Alive {
 
     private PlantMaturity maturity;
 
-    public Plant(int x, int y, String type, String name, double mass, double growingLevel,
-                 String level, boolean scanned) {
+    public Plant(final int x, final int y, final String type, final String name, final double mass,
+                 final double growingLevel, final String level, final boolean scanned) {
         super(x, y, mass, scanned, name, type);
         this.level = LEVEL_YOUNG;
         this.growingLevel = GROWTH_RESET;
@@ -32,10 +32,23 @@ public abstract class Plant extends Alive {
         this.stuckProb = getStuckPossibility() / STUCK_PROB_DIVISOR;
     }
 
+    /**
+     * Gets the oxygen output of the plant.
+     * @return the amount of oxygen produced.
+     */
     public abstract double getOxygenOutput();
+
+    /**
+     * Gets the probability of a robot getting stuck in this plant.
+     * @return the stuck probability percentage.
+     */
     public abstract int getStuckPossibility();
 
-    public double getMaturityModifier() {
+    /**
+     * Gets the modifier value based on the plant's current maturity.
+     * @return the maturity modifier.
+     */
+    public final double getMaturityModifier() {
         return switch (this.maturity) {
             case YOUNG -> MATURITY_YOUNG;
             case MATURE -> MATURITY_MATURE;
@@ -44,7 +57,10 @@ public abstract class Plant extends Alive {
         };
     }
 
-    public void grow() {
+    /**
+     * Increases the plant's growth level and advances its maturity stage if the threshold is met.
+     */
+    public final void grow() {
         if (this.growingLevel >= GROWTH_THRESHOLD) {
             this.growingLevel = GROWTH_RESET;
             if (this.level.equals(LEVEL_YOUNG)) {
@@ -55,17 +71,12 @@ public abstract class Plant extends Alive {
                 this.maturity = PlantMaturity.OLD;
             } else if (this.level.equals(LEVEL_OLD)) {
                 this.level = LEVEL_DEAD;
-                // fa planta sa moara
             }
         }
     }
 
     @Override
-    public void die(Entity entity) {
-
-    }
-
-    public EntityType getEntityType() {
-        return EntityType.PLANT;
+    public void accept(final Cell cell) {
+        cell.setPlant(this);
     }
 }

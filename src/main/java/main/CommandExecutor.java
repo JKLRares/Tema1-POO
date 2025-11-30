@@ -4,15 +4,38 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import fileio.AirInput;
+import fileio.AnimalInput;
+import fileio.CommandInput;
+import fileio.InputLoader;
+import fileio.PairInput;
+import fileio.PlantInput;
+import fileio.SimulationInput;
+import fileio.SoilInput;
+import fileio.TerritorySectionParamsInput;
+import fileio.WaterInput;
 import java.util.List;
 import java.util.Map;
-import fileio.*;
-import main.soils.*;
-import main.plants.*;
-import main.animals.*;
-import main.air.*;
-
-import java.util.List;
+import main.air.Desert;
+import main.air.Montan;
+import main.air.Polar;
+import main.air.Temperat;
+import main.air.Tropical;
+import main.animals.Carnivore;
+import main.animals.Detritivores;
+import main.animals.Herbivore;
+import main.animals.Omnivore;
+import main.animals.Parasites;
+import main.plants.Algae;
+import main.plants.Ferns;
+import main.plants.FloweringPlants;
+import main.plants.Gymnosperms;
+import main.plants.Mosses;
+import main.soils.DesertSoil;
+import main.soils.ForestSoil;
+import main.soils.GrasslandSoil;
+import main.soils.SwampSoil;
+import main.soils.TundraSoil;
 
 public class CommandExecutor {
     private static final double PLANT_GROWTH_INCREMENT = 0.2;
@@ -38,12 +61,12 @@ public class CommandExecutor {
     private int changeWeatherTimestamp = 0;
     private int previousTimestamp = 0;
 
-    public CommandExecutor(InputLoader inputLoader, ObjectMapper mapper) {
+    public CommandExecutor(final InputLoader inputLoader, final ObjectMapper mapper) {
         this.inputLoader = inputLoader;
         this.mapper = mapper;
     }
 
-    private void updateEnvironment(int timestamp) {
+    private void updateEnvironment(final int timestamp) {
         for (int x = 0; x < matrix.getWidth(); x++) {
             for (int y = 0; y < matrix.getHeight(); y++) {
                 Cell cell = matrix.getCell(x, y);
@@ -57,10 +80,7 @@ public class CommandExecutor {
                 if (cell.getWater() != null && cell.getWater().isScanned()) {
                     if (timestamp % 2 != 0) {
                         if (cell.getAir() != null) {
-                            double newHum = cell.getAir().getHumidity() + ENV_VAL_INCREMENT;
-                            cell.getAir().setHumidity(Math.round(newHum * ROUNDING_FACTOR)
-                                    / ROUNDING_FACTOR);
-                            cell.getAir().setAirQual(cell.getAir().airQuality());
+                            cell.getAir().updateEnvironmentParams(ENV_VAL_INCREMENT, ROUNDING_FACTOR);
                         }
                         if (cell.getSoil() != null) {
                             double newRet = cell.getSoil().getWaterRetention() + ENV_VAL_INCREMENT;
@@ -93,7 +113,7 @@ public class CommandExecutor {
         scannedAnimals.updateAll(timestamp, matrix);
     }
 
-    public void executeCommands(ArrayNode outputArray) {
+    public void executeCommands(final ArrayNode outputArray) {
         List<CommandInput> commands = inputLoader.getCommands();
 
         for (CommandInput cmd : commands) {
@@ -160,247 +180,258 @@ public class CommandExecutor {
                 }
             }
 
-            switch (commandName) {
-                case "printEnvConditions":
-                    JsonNode conditions = getEnvConditions(robot.getRobotX(), robot.getRobotY());
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        resultNode.set("output", conditions);
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "printMap":
-                    ArrayNode mapOutput = getMapOutput();
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        resultNode.set("output", mapOutput);
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "moveRobot":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        boolean moved = robot.moveRobot(matrix);
-                        if (moved) {
-                            String message = "The robot has successfully moved to position ("
-                                    + robot.getRobotX() + ", " + robot.getRobotY() + ").";
-                            resultNode.put("message", message);
-                        } else {
-                            resultNode.put("message",
-                                    "ERROR: Not enough battery left. Cannot perform action");
-                        }
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "getEnergyStatus":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else if (robot != null) {
-                        String msg = "TerraBot has " + robot.getRobotBattery()
-                                + " energy points left.";
-                        resultNode.put("message", msg);
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "rechargeBattery":
-                    int time = cmd.getTimeToCharge();
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        robot.setRobotBattery(robot.getRobotBattery() + time);
-                        robotChargingTimestamp = timestamp + time;
-                        resultNode.put("message", "Robot battery is charging.");
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "changeWeatherConditions":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        boolean changed = false;
-                        for (int x = 0; x < matrix.getWidth(); x++) {
-                            for (int y = 0; y < matrix.getHeight(); y++) {
-                                Cell cell = matrix.getCell(x, y);
-                                if (cell.getAir() != null && cell.getAir().event(cmd)) {
-                                    changed = true;
-                                }
-                            }
-                        }
-                        if (changed) {
-                            changeWeatherTimestamp = timestamp + WEATHER_CHANGE_DURATION;
-                            resultNode.put("message", "The weather has changed.");
-                        } else {
-                            resultNode.put("message", "ERROR: The weather change does not affect "
-                                    + "the environment. Cannot perform action");
-                        }
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "scanObject":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        int battery = robot.getRobotBattery() - SCAN_COST;
-                        boolean checked = false;
-                        Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
-                        if (battery < 0) {
-                            resultNode.put("message", "ERROR: Not enough energy to perform action");
-                        } else {
-                            if (cmd.getColor().equalsIgnoreCase("none") &&
-                                    cmd.getSmell().equalsIgnoreCase("none") &&
-                                    cmd.getSound().equalsIgnoreCase("none")
-                                    && cell.getWater() != null) {
-                                resultNode.put("message", "The scanned object is water.");
-                                checked = true;
-                                cell.getWater().setScanned(true);
-                                inventory.addItem(cell.getWater().getName());
-                            } else if (!cmd.getColor().equalsIgnoreCase("none") &&
-                                    !cmd.getSmell().equalsIgnoreCase("none") &&
-                                    cmd.getSound().equalsIgnoreCase("none")
-                                    && cell.getPlant() != null) {
-                                resultNode.put("message", "The scanned object is a plant.");
-                                checked = true;
-                                cell.getPlant().setScanned(true);
-                                inventory.addItem(cell.getPlant().getName());
-                            } else if (!cmd.getColor().equalsIgnoreCase("none") &&
-                                    !cmd.getSmell().equalsIgnoreCase("none") &&
-                                    !cmd.getSound().equalsIgnoreCase("none")
-                                    && cell.getAnimal() != null) {
-                                Animal foundAnimal = cell.getAnimal();
-                                if (!foundAnimal.isScanned()) {
-                                    foundAnimal.setScanned(true);
-                                    foundAnimal.setScanTimestamp(timestamp);
-                                    scannedAnimals.addAnimal(foundAnimal);
-                                    inventory.addItem(cell.getAnimal().getName());
-                                }
-                                resultNode.put("message", "The scanned object is an animal.");
-                                checked = true;
-                            }
-                            if (!checked) {
-                                resultNode.put("message",
-                                        "ERROR: Object not found. Cannot perform action");
-                            } else {
-                                robot.setRobotBattery(battery);
-                            }
-                        }
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "learnFact":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        if (robot.getRobotBattery() < LEARN_FACT_COST) {
-                            resultNode.put("message",
-                                    "ERROR: Not enough battery left. Cannot perform action");
-                        } else {
-                            String entityName = cmd.getComponents();
-                            String factInfo = cmd.getSubject();
-
-                            if (inventory.addFact(entityName, factInfo)) {
-                                robot.setRobotBattery(robot.getRobotBattery() - LEARN_FACT_COST);
-                                resultNode.put("message",
-                                        "The fact has been successfully saved in the database.");
-                            } else {
-                                resultNode.put("message",
-                                        "ERROR: Subject not yet saved. Cannot perform action");
-                            }
-                        }
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "printKnowledgeBase":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        ArrayNode output = mapper.createArrayNode();
-                        List<String> items = inventory.getCollectedItems();
-                        Map<String, List<String>> knowledgeBase = inventory.getKnowledgeBase();
-
-                        for (String item : items) {
-                            if (knowledgeBase.containsKey(item)
-                                    && !knowledgeBase.get(item).isEmpty()) {
-                                ObjectNode itemNode = mapper.createObjectNode();
-                                itemNode.put("topic", item);
-
-                                ArrayNode factsArray = mapper.createArrayNode();
-                                for (String fact : knowledgeBase.get(item)) {
-                                    factsArray.add(fact);
-                                }
-                                itemNode.set("facts", factsArray);
-                                output.add(itemNode);
-                            }
-                        }
-                        resultNode.set("output", output);
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-
-                case "improveEnvironment":
-                    if (timestamp < robotChargingTimestamp) {
-                        resultNode.put("message",
-                                "ERROR: Robot still charging. Cannot perform action");
-                    } else {
-                        if (robot.getRobotBattery() < IMPROVE_ENV_COST) {
-                            resultNode.put("message",
-                                    "ERROR: Not enough battery left. Cannot perform action");
-                        } else {
-                            String improvementType = cmd.getImprovementType();
-                            String name = cmd.getName();
-                            if (!inventory.getCollectedItems().contains(name)) {
-                                resultNode.put("message",
-                                        "ERROR: Subject not yet saved. Cannot perform action");
-                            } else if (!inventory.checkRequirement(name, improvementType)) {
-                                resultNode.put("message",
-                                        "ERROR: Fact not yet saved. Cannot perform action");
-                            } else {
-                                Cell currentCell = matrix.getCell(robot.getRobotX(),
-                                        robot.getRobotY());
-                                String successMessage = inventory.applyImprovement(currentCell,
-                                        improvementType, name);
-                                robot.setRobotBattery(robot.getRobotBattery() - IMPROVE_ENV_COST);
-                                resultNode.put("message", successMessage);
-                            }
-                        }
-                    }
-                    resultNode.put("timestamp", timestamp);
-                    outputArray.add(resultNode);
-                    break;
-            }
-
+            processRuntimeCommand(cmd, timestamp, outputArray);
         }
     }
 
-    private Matrix loadWorld(SimulationInput params) {
+    private void processRuntimeCommand(final CommandInput cmd, final int timestamp,
+                                       final ArrayNode outputArray) {
+        String commandName = cmd.getCommand();
+        ObjectNode resultNode = mapper.createObjectNode();
+        resultNode.put("command", commandName);
+
+        switch (commandName) {
+            case "printEnvConditions":
+                JsonNode conditions = getEnvConditions(robot.getRobotX(), robot.getRobotY());
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    resultNode.set("output", conditions);
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "printMap":
+                ArrayNode mapOutput = getMapOutput();
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    resultNode.set("output", mapOutput);
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "moveRobot":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    boolean moved = robot.moveRobot(matrix);
+                    if (moved) {
+                        String message = "The robot has successfully moved to position ("
+                                + robot.getRobotX() + ", " + robot.getRobotY() + ").";
+                        resultNode.put("message", message);
+                    } else {
+                        resultNode.put("message",
+                                "ERROR: Not enough battery left. Cannot perform action");
+                    }
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "getEnergyStatus":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else if (robot != null) {
+                    String msg = "TerraBot has " + robot.getRobotBattery()
+                            + " energy points left.";
+                    resultNode.put("message", msg);
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "rechargeBattery":
+                int time = cmd.getTimeToCharge();
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    robot.setRobotBattery(robot.getRobotBattery() + time);
+                    robotChargingTimestamp = timestamp + time;
+                    resultNode.put("message", "Robot battery is charging.");
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "changeWeatherConditions":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    boolean changed = false;
+                    for (int x = 0; x < matrix.getWidth(); x++) {
+                        for (int y = 0; y < matrix.getHeight(); y++) {
+                            Cell cell = matrix.getCell(x, y);
+                            if (cell.getAir() != null && cell.getAir().event(cmd)) {
+                                changed = true;
+                            }
+                        }
+                    }
+                    if (changed) {
+                        changeWeatherTimestamp = timestamp + WEATHER_CHANGE_DURATION;
+                        resultNode.put("message", "The weather has changed.");
+                    } else {
+                        resultNode.put("message", "ERROR: The weather change does not affect "
+                                + "the environment. Cannot perform action");
+                    }
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "scanObject":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    int battery = robot.getRobotBattery() - SCAN_COST;
+                    boolean checked = false;
+                    Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
+                    if (battery < 0) {
+                        resultNode.put("message", "ERROR: Not enough energy to perform action");
+                    } else {
+                        if (cmd.getColor().equalsIgnoreCase("none")
+                                && cmd.getSmell().equalsIgnoreCase("none")
+                                && cmd.getSound().equalsIgnoreCase("none")
+                                && cell.getWater() != null) {
+                            resultNode.put("message", "The scanned object is water.");
+                            checked = true;
+                            cell.getWater().setScanned(true);
+                            inventory.addItem(cell.getWater().getName());
+                        } else if (!cmd.getColor().equalsIgnoreCase("none")
+                                && !cmd.getSmell().equalsIgnoreCase("none")
+                                && cmd.getSound().equalsIgnoreCase("none")
+                                && cell.getPlant() != null) {
+                            resultNode.put("message", "The scanned object is a plant.");
+                            checked = true;
+                            cell.getPlant().setScanned(true);
+                            inventory.addItem(cell.getPlant().getName());
+                        } else if (!cmd.getColor().equalsIgnoreCase("none")
+                                && !cmd.getSmell().equalsIgnoreCase("none")
+                                && !cmd.getSound().equalsIgnoreCase("none")
+                                && cell.getAnimal() != null) {
+                            Animal foundAnimal = cell.getAnimal();
+                            if (!foundAnimal.isScanned()) {
+                                foundAnimal.setScanned(true);
+                                foundAnimal.setScanTimestamp(timestamp);
+                                scannedAnimals.addAnimal(foundAnimal);
+                                inventory.addItem(cell.getAnimal().getName());
+                            }
+                            resultNode.put("message", "The scanned object is an animal.");
+                            checked = true;
+                        }
+                        if (!checked) {
+                            resultNode.put("message",
+                                    "ERROR: Object not found. Cannot perform action");
+                        } else {
+                            robot.setRobotBattery(battery);
+                        }
+                    }
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "learnFact":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    if (robot.getRobotBattery() < LEARN_FACT_COST) {
+                        resultNode.put("message",
+                                "ERROR: Not enough battery left. Cannot perform action");
+                    } else {
+                        String entityName = cmd.getComponents();
+                        String factInfo = cmd.getSubject();
+
+                        if (inventory.addFact(entityName, factInfo)) {
+                            robot.setRobotBattery(robot.getRobotBattery() - LEARN_FACT_COST);
+                            resultNode.put("message",
+                                    "The fact has been successfully saved in the database.");
+                        } else {
+                            resultNode.put("message",
+                                    "ERROR: Subject not yet saved. Cannot perform action");
+                        }
+                    }
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "printKnowledgeBase":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    ArrayNode output = mapper.createArrayNode();
+                    List<String> items = inventory.getCollectedItems();
+                    Map<String, List<String>> knowledgeBase = inventory.getKnowledgeBase();
+
+                    for (String item : items) {
+                        if (knowledgeBase.containsKey(item)
+                                && !knowledgeBase.get(item).isEmpty()) {
+                            ObjectNode itemNode = mapper.createObjectNode();
+                            itemNode.put("topic", item);
+
+                            ArrayNode factsArray = mapper.createArrayNode();
+                            for (String fact : knowledgeBase.get(item)) {
+                                factsArray.add(fact);
+                            }
+                            itemNode.set("facts", factsArray);
+                            output.add(itemNode);
+                        }
+                    }
+                    resultNode.set("output", output);
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            case "improveEnvironment":
+                if (timestamp < robotChargingTimestamp) {
+                    resultNode.put("message",
+                            "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    if (robot.getRobotBattery() < IMPROVE_ENV_COST) {
+                        resultNode.put("message",
+                                "ERROR: Not enough battery left. Cannot perform action");
+                    } else {
+                        String improvementType = cmd.getImprovementType();
+                        String name = cmd.getName();
+                        if (!inventory.getCollectedItems().contains(name)) {
+                            resultNode.put("message",
+                                    "ERROR: Subject not yet saved. Cannot perform action");
+                        } else if (!inventory.checkRequirement(name, improvementType)) {
+                            resultNode.put("message",
+                                    "ERROR: Fact not yet saved. Cannot perform action");
+                        } else {
+                            Cell currentCell = matrix.getCell(robot.getRobotX(),
+                                    robot.getRobotY());
+                            String successMessage = inventory.applyImprovement(currentCell,
+                                    improvementType, name);
+                            robot.setRobotBattery(robot.getRobotBattery() - IMPROVE_ENV_COST);
+                            resultNode.put("message", successMessage);
+                        }
+                    }
+                }
+                resultNode.put("timestamp", timestamp);
+                outputArray.add(resultNode);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private Matrix loadWorld(final SimulationInput params) {
         String dim = params.getTerritoryDim();
         String[] parts = dim.split("x");
         int rows = Integer.parseInt(parts[0]);
@@ -428,7 +459,7 @@ public class CommandExecutor {
         return newMatrix;
     }
 
-    private void parseSoils(List<SoilInput> list, Matrix matrix) {
+    private void parseSoils(final List<SoilInput> list, final Matrix world) {
         for (SoilInput entry : list) {
             String type = entry.getType();
             for (PairInput loc : entry.getSections()) {
@@ -444,7 +475,8 @@ public class CommandExecutor {
                 } else if (type.equalsIgnoreCase("TundraSoil")) {
                     newSoil = new TundraSoil(loc.getX(), loc.getY(), entry.getMass(), false,
                             entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getPermafrostDepth());
+                            entry.getSoilpH(), entry.getOrganicMatter(),
+                            entry.getPermafrostDepth());
                 } else if (type.equalsIgnoreCase("DesertSoil")) {
                     newSoil = new DesertSoil(loc.getX(), loc.getY(), entry.getMass(), false,
                             entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
@@ -455,13 +487,13 @@ public class CommandExecutor {
                             entry.getSoilpH(), entry.getOrganicMatter(), entry.getRootDensity());
                 }
                 if (newSoil != null) {
-                    matrix.placeEntity(newSoil);
+                    world.placeEntity(newSoil);
                 }
             }
         }
     }
 
-    private void parsePlants(List<PlantInput> list, Matrix matrix) {
+    private void parsePlants(final List<PlantInput> list, final Matrix world) {
         for (PlantInput entry : list) {
             String type = entry.getType();
             String typeUpper = type.toUpperCase();
@@ -485,13 +517,13 @@ public class CommandExecutor {
                             entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
                 }
                 if (newPlant != null) {
-                    matrix.placeEntity(newPlant);
+                    world.placeEntity(newPlant);
                 }
             }
         }
     }
 
-    private void parseAnimals(List<AnimalInput> list, Matrix matrix) {
+    private void parseAnimals(final List<AnimalInput> list, final Matrix world) {
         for (AnimalInput entry : list) {
             String type = entry.getType();
             String typeUpper = type.toUpperCase();
@@ -515,13 +547,13 @@ public class CommandExecutor {
                             entry.getName(), type);
                 }
                 if (newAnimal != null) {
-                    matrix.placeEntity(newAnimal);
+                    world.placeEntity(newAnimal);
                 }
             }
         }
     }
 
-    private void parseWater(List<WaterInput> list, Matrix matrix) {
+    private void parseWater(final List<WaterInput> list, final Matrix world) {
         for (WaterInput entry : list) {
             double waterQuality = entry.getPurity() / PURITY_DIVISOR;
             int frozenScore = 0;
@@ -531,12 +563,12 @@ public class CommandExecutor {
                         entry.getName(), entry.getType(), entry.getSalinity(), entry.getPH(),
                         entry.getPurity(), entry.getTurbidity(), entry.getContaminantIndex(),
                         waterQuality, entry.isFrozen(), frozenScore);
-                matrix.placeEntity(newWater);
+                world.placeEntity(newWater);
             }
         }
     }
 
-    private void parseAir(List<AirInput> list, Matrix matrix) {
+    private void parseAir(final List<AirInput> list, final Matrix world) {
         for (AirInput entry : list) {
             String type = entry.getType();
             for (PairInput loc : entry.getSections()) {
@@ -565,13 +597,13 @@ public class CommandExecutor {
                             entry.getOxygenLevel(), entry.getIceCrystalConcentration());
                 }
                 if (newAir != null) {
-                    matrix.placeEntity(newAir);
+                    world.placeEntity(newAir);
                 }
             }
         }
     }
 
-    private JsonNode getEnvConditions(int x, int y) {
+    private JsonNode getEnvConditions(final int x, final int y) {
         ObjectNode envNode = mapper.createObjectNode();
         Cell cell = matrix.getCell(x, y);
 
@@ -676,7 +708,7 @@ public class CommandExecutor {
         return mapArray;
     }
 
-    private void removeCommonFields(ObjectNode node) {
+    private void removeCommonFields(final ObjectNode node) {
         node.remove("x");
         node.remove("y");
         node.remove("scanned");

@@ -4,18 +4,23 @@ import main.Plant;
 import lombok.Getter;
 
 @Getter
-public class FloweringPlants extends Plant {
-    public FloweringPlants(int x, int y, String type, String name, double mass, double growingLevel, String level, boolean scanned) {
+public final class FloweringPlants extends Plant {
+    private static final double OXYGEN_OUTPUT = 6.0;
+    private static final int STUCK_POSSIBILITY = 90;
+
+    public FloweringPlants(final int x, final int y, final String type, final String name,
+                           final double mass, final double growingLevel, final String level,
+                           final boolean scanned) {
         super(x, y, type, name, mass, growingLevel, level, scanned);
     }
 
     @Override
     public double getOxygenOutput() {
-        return 6;
+        return OXYGEN_OUTPUT;
     }
 
     @Override
     public int getStuckPossibility() {
-        return 90;
+        return STUCK_POSSIBILITY;
     }
 }

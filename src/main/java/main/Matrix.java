@@ -7,7 +7,7 @@ public class Matrix {
     private Cell[][] grid;
     private int height, width;
 
-    public Matrix(int rows, int cols) {
+    public Matrix(final int rows, final int cols) {
         this.height = rows;
         this.width = cols;
         this.grid = new Cell[rows][cols];
@@ -19,16 +19,16 @@ public class Matrix {
         }
     }
 
-    public void placeEntity(Entity e) {
+    public void placeEntity(final Entity e) {
         int inputX = e.getX();
         int inputY = e.getY();
 
         int matrixRow = (this.height - 1) - inputY;
 
-        grid[matrixRow][inputX].addEntity(e);
+        e.accept(grid[matrixRow][inputX]);
     }
 
-    public Cell getCell(int x, int y) {
+    public Cell getCell(final int x, final int y) {
         int matrixRow = (this.height - 1) - y;
         return grid[matrixRow][x];
     }
