@@ -1,0 +1,157 @@
+{
+  "simulationParams": [
+    {
+      "territoryDim": "3x3",
+      "energyPoints": 30,
+      "territorySectionParams": {
+        "soil": [
+          {
+            "type": "ForestSoil",
+            "name": "Forest",
+            "mass": 1000,
+            "nitrogen": 2,
+            "waterRetention": 4,
+            "soilpH": 7,
+            "organicMatter": 1,
+            "leafLitter": 0,
+            "sections": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1,
+                "y": 0
+              },
+              {
+                "x": 2,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 0,
+                "y": 2
+              },
+              {
+                "x": 1,
+                "y": 2
+              },
+              {
+                "x": 2,
+                "y": 2
+              }
+            ]
+          },
+          {
+            "type": "ForestSoil",
+            "name": "WetForest",
+            "mass": 1000,
+            "nitrogen": 2,
+            "waterRetention": 100,
+            "soilpH": 7,
+            "organicMatter": 1,
+            "leafLitter": 0,
+            "sections": [
+              {
+                "x": 1,
+                "y": 1
+              }
+            ]
+          }
+        ],
+        "air": [
+          {
+            "type": "TemperateAir",
+            "name": "Temperate air",
+            "mass": 1000,
+            "humidity": 60,
+            "temperature": 20,
+            "oxygenLevel": 20,
+            "pollenLevel": 0,
+            "sections": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 1,
+                "y": 0
+              },
+              {
+                "x": 2,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 0,
+                "y": 2
+              },
+              {
+                "x": 1,
+                "y": 2
+              },
+              {
+                "x": 2,
+                "y": 2
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "commands": [
+    {
+      "command": "startSimulation",
+      "timestamp": 0
+    },
+    {
+      "command": "moveTo",
+      "targetX": 0,
+      "targetY": 1,
+      "timestamp": 1
+    },
+    {
+      "command": "planRoute",
+      "targetX": 2,
+      "targetY": 1,
+      "timestamp": 2
+    },
+    {
+      "command": "getEnergyStatus",
+      "timestamp": 2
+    },
+    {
+      "command": "moveTo",
+      "targetX": 2,
+      "targetY": 1,
+      "timestamp": 2
+    },
+    {
+      "command": "getEnergyStatus",
+      "timestamp": 2
+    },
+    {
+      "command": "endSimulation",
+      "timestamp": 3
+    }
+  ]
+}

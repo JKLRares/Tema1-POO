@@ -25,5 +25,7 @@ public final class CommandInput {
     private int numberOfHikers;
     private String improvementType;
     private String name;
+    private int targetX;
+    private int targetY;
 }
 
