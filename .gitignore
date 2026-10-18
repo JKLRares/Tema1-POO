@@ -36,3 +36,17 @@ build/
 .DS_Store
 
 out/
+
+# Local coursework backups (may contain Git metadata)
+/ConstantinescuRares323CA.zip
+/git_log.txt
+/.dist/
+
+# Local output and runtime diagnostics
+*.log
+hs_err_pid*
+replay_pid*
+/dependency-reduced-pom.xml
+.env
+.env.*
+!.env.example

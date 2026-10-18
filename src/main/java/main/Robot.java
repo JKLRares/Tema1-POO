@@ -1,89 +1,67 @@
 package main;
 
 import lombok.Getter;
-import lombok.Setter;
+import java.util.Optional;
+import main.navigation.Position;
+import main.navigation.Route;
+import main.navigation.RoutePlanner;
 
-@Getter @Setter
+@Getter
 public final class Robot {
-    private static final int INITIAL_BEST_SCORE = 10000;
-    private static final int DIRECTION_COUNT = 4;
-
-    private int robotX, robotY, robotBattery;
+    private int robotX;
+    private int robotY;
+    private int robotBattery;
 
     public Robot(final int robotX, final int robotY, final int robotBattery) {
-        this.robotX = 0;
-        this.robotY = 0;
+        if (robotX < 0 || robotY < 0 || robotBattery < 0) {
+            throw new IllegalArgumentException("Robot position and battery must be nonnegative");
+        }
+        this.robotX = robotX;
+        this.robotY = robotY;
         this.robotBattery = robotBattery;
     }
 
-    private Cell bestNeigh(final int x, final int y, final Matrix map) {
-        int[] dx = {0, 1, 0, -1};
-        int[] dy = {1, 0, -1, 0};
-        int cellScore;
-        int bestX = 0;
-        int bestY = 0;
-        int bestScore = INITIAL_BEST_SCORE;
+    /** Changes stored energy, rejecting invalid state instead of allowing negative battery. */
+    public void setRobotBattery(final int energy) {
+        if (energy < 0) {
+            throw new IllegalArgumentException("Battery cannot be negative");
+        }
+        robotBattery = energy;
+    }
 
-        for (int i = 0; i < DIRECTION_COUNT; i++) {
-            int tryX = x + dx[i];
-            int tryY = y + dy[i];
-            if (tryX >= 0 && tryX < map.getWidth() && tryY >= 0 && tryY < map.getHeight()) {
-                Cell checkNeigh = map.getCell(tryX, tryY);
-                int nr = 2;
-                double score = Math.max(checkNeigh.getAir().airToxicity(), 0)
-                        + checkNeigh.getSoil().probFormula();
-
-                if (checkNeigh.getAnimal() != null) {
-                    score += checkNeigh.getAnimal().getAttackProb();
-                    nr++;
-                }
-                if (checkNeigh.getPlant() != null) {
-                    score += checkNeigh.getPlant().getStuckProb();
-                    nr++;
-                }
-                double mean = Math.abs(score / nr);
-                cellScore = (int) Math.round(mean);
-                if (cellScore < bestScore) {
-                    bestScore = cellScore;
-                    bestX = tryX;
-                    bestY = tryY;
-                }
+    /** Moves to the least costly neighbor; ties follow north, east, south, west order. */
+    public boolean moveRobot(final Matrix map) {
+        Cell best = null;
+        int bestCost = Integer.MAX_VALUE;
+        for (Cell neighbor : map.neighbors(robotX, robotY)) {
+            int cost = MovementCost.toEnter(neighbor);
+            if (best == null || cost < bestCost) {
+                best = neighbor;
+                bestCost = cost;
             }
         }
-        return map.getCell(bestX, bestY);
-    }
-
-    private int calculateCost(final Cell cell) {
-        int nr = 2;
-        double score = Math.max(cell.getAir().airToxicity(), 0) + cell.getSoil().probFormula();
-        if (cell.getAnimal() != null) {
-            score += cell.getAnimal().getAttackProb();
-            nr++;
-        }
-        if (cell.getPlant() != null) {
-            score += cell.getPlant().getStuckProb();
-            nr++;
-        }
-        return (int) Math.round(Math.abs(score / nr));
-    }
-
-    /**
-     * Attempts to move the robot to the best neighboring cell based on calculated scores.
-     * Consumes battery if movement is successful.
-     *
-     * @param map the matrix representing the world map
-     * @return true if the robot moved successfully, false if battery was insufficient
-     */
-    public boolean moveRobot(final Matrix map) {
-        Cell bestCell = bestNeigh(robotX, robotY, map);
-        int cost = calculateCost(bestCell);
-        if (robotBattery < cost) {
+        if (best == null || robotBattery < bestCost) {
             return false;
-        } else {
-            robotBattery -= cost;
-            robotX = bestCell.getX();
-            robotY = bestCell.getY();
         }
+        robotBattery -= bestCost;
+        robotX = best.getX();
+        robotY = best.getY();
         return true;
     }
+    /**
+     * Executes an entire route atomically at the current timestamp, or leaves the robot
+     * unchanged.
+     */
+    public Optional<Route> moveTo(final Matrix map, final int targetX, final int targetY) {
+        Position destination = new Position(targetX, targetY);
+        Route route = new RoutePlanner().plan(map, new Position(robotX, robotY), destination);
+        if (route.energyCost() > robotBattery) {
+            return Optional.empty();
+        }
+        robotBattery -= (int) route.energyCost();
+        robotX = targetX;
+        robotY = targetY;
+        return Optional.of(route);
+    }
+
 }

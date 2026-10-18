@@ -5,5 +5,6 @@ import lombok.Getter;
 public enum PlantMaturity {
     YOUNG,
     MATURE,
-    OLD;
+    OLD,
+    DEAD;
 }

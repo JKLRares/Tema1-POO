@@ -6,6 +6,7 @@ import lombok.Setter;
 
 @Getter @Setter
 public abstract class Air extends Entity {
+    private static final int WEATHER_DURATION = 2;
     private static final double MIN_BOUND = 0.0;
     private static final double MAX_BOUND = 100.0;
     private static final double ROUNDING_FACTOR = 100.0;
@@ -22,6 +23,12 @@ public abstract class Air extends Entity {
     private double temperature;
     private double oxygenLevel;
     private double airQual;
+    @Getter(lombok.AccessLevel.NONE)
+    @Setter(lombok.AccessLevel.NONE)
+    private double weatherAdjustment;
+    @Getter(lombok.AccessLevel.NONE)
+    @Setter(lombok.AccessLevel.NONE)
+    private int weatherExpiry;
 
     public Air(final int x, final int y, final double mass, final boolean scanned,
                final String name, final String type, final double humidity,
@@ -57,7 +64,9 @@ public abstract class Air extends Entity {
      */
     public final double airQuality() {
         double normalizeScore = Math.max(MIN_BOUND, Math.min(MAX_BOUND, initialAirQuality()));
-        return Math.round(normalizeScore * ROUNDING_FACTOR) / ROUNDING_FACTOR;
+        double adjusted = Math.max(MIN_BOUND,
+                Math.min(MAX_BOUND, normalizeScore + weatherAdjustment));
+        return Math.round(adjusted * ROUNDING_FACTOR) / ROUNDING_FACTOR;
     }
 
     /**
@@ -95,14 +104,37 @@ public abstract class Air extends Entity {
         }
     }
 
-    public void updateEnvironmentParams(final double humidityInc, final double roundingFactor) {
+    /** Replaces the temporary weather effect while keeping it active through recalculation. */
+    protected final void applyWeatherEffect(final double adjustment, final int timestamp) {
+        weatherAdjustment = adjustment;
+        weatherExpiry = timestamp + WEATHER_DURATION;
+        airQual = airQuality();
+    }
+
+    /** Clears temporary weather state; subclasses may also clear their event metadata. */
+    public void clearWeather() {
+        weatherAdjustment = 0;
+        weatherExpiry = 0;
+        airQual = airQuality();
+    }
+
+    /** Expires this cell's weather independently of other climates and later events. */
+    public final void expireWeather(final int timestamp) {
+        if (weatherExpiry > 0 && timestamp >= weatherExpiry) {
+            clearWeather();
+        }
+    }
+
+    /** Updates humidity and recalculates quality with any active weather effect. */
+    public final void updateEnvironmentParams(final double humidityInc,
+                                              final double roundingFactor) {
         double newHum = this.humidity + humidityInc;
         this.humidity = Math.round(newHum * roundingFactor) / roundingFactor;
         this.airQual = airQuality();
     }
 
     @Override
-    public void accept(final Cell cell) {
+    public final void accept(final Cell cell) {
         cell.setAir(this);
     }
 }

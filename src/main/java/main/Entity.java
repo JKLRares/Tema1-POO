@@ -17,15 +17,12 @@ public abstract class Entity {
         this.x = x;
         this.y = y;
         this.mass = mass;
-        this.scanned = false;
+        this.scanned = scanned;
         this.name = name;
         this.type = type;
     }
 
-    /**
-     * Gets the type of the entity (Plant, Animal, etc.).
-     * @return the EntityType enum value.
-     */
+    /** Attaches this concrete entity to its corresponding slot in a cell. */
 
     public abstract void accept(Cell cell);
 }

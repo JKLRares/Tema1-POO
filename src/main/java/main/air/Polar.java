@@ -34,7 +34,7 @@ public final class Polar extends Air {
     public boolean event(final CommandInput cmd) {
         if (cmd.getType() != null && cmd.getType().trim().equals("polarStorm")) {
             this.windSpeed = cmd.getWindSpeed();
-            setAirQual(getAirQual() - (this.windSpeed * STORM_PENALTY));
+            applyWeatherEffect(-this.windSpeed * STORM_PENALTY, cmd.getTimestamp());
             return true;
         }
         return false;

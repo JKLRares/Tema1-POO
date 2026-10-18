@@ -63,13 +63,14 @@ public abstract class Soil extends Entity {
         }
     }
 
-    public void updateWaterRetention(final double retentionInc, final double roundingFactor) {
+    /** Adds retention while preserving the caller's chosen decimal precision. */
+    public final void updateWaterRetention(final double retentionInc, final double roundingFactor) {
         double newRet = this.waterRetention + retentionInc;
         this.waterRetention = Math.round(newRet * roundingFactor) / roundingFactor;
     }
 
     @Override
-    public void accept(final Cell cell) {
+    public final void accept(final Cell cell) {
         cell.setSoil(this);
     }
 }

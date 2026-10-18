@@ -31,10 +31,11 @@ public final class Temperat extends Air {
 
     @Override
     public boolean event(final CommandInput cmd) {
-        if (cmd.getSeason() != null) {
+        if (cmd.getType() != null
+                && "newSeason".equals(cmd.getType().trim()) && cmd.getSeason() != null) {
             season = cmd.getSeason();
             double seasonPenalty = season.equalsIgnoreCase("Spring") ? SEASON_PENALTY_VAL : 0;
-            setAirQual(getAirQual() - seasonPenalty);
+            applyWeatherEffect(-seasonPenalty, cmd.getTimestamp());
             return true;
         }
         return false;

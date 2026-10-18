@@ -31,8 +31,9 @@ public final class Montan extends Air {
 
     @Override
     public boolean event(final CommandInput cmd) {
-        if (cmd.getNumberOfHikers() > 0) {
-            setAirQual(getAirQual() - (cmd.getNumberOfHikers() * HIKER_PENALTY));
+        if (cmd.getType() != null
+                && "peopleHiking".equals(cmd.getType().trim()) && cmd.getNumberOfHikers() > 0) {
+            applyWeatherEffect(-cmd.getNumberOfHikers() * HIKER_PENALTY, cmd.getTimestamp());
             return true;
         }
         return false;

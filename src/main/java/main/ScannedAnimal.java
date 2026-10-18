@@ -1,38 +1,26 @@
 package main;
 
-public class ScannedAnimal {
-    private final Animal[] scannedAnimals;
-    private int count;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
-    public ScannedAnimal() {
-        this.scannedAnimals = new Animal[100];
-        this.count = 0;
+/** Tracks scanned animals in scan order without a fixed capacity limit. */
+public final class ScannedAnimal {
+    private final Set<Animal> scannedAnimals = new LinkedHashSet<>();
+
+    /** Registers each animal identity once. */
+    public void addAnimal(final Animal animal) {
+        scannedAnimals.add(animal);
     }
 
-    public void addAnimal(Animal animal) {
-        for (int i = 0; i < count; i++) {
-            if (scannedAnimals[i] == animal) {
-                return;
-            }
-        }
-
-        if (count < scannedAnimals.length) {
-            scannedAnimals[count] = animal;
-            count++;
-        }
-    }
-
+    /** Updates every tick after scanning, ignoring animals removed from the world. */
     public void updateAll(final int currentTimestamp, final Matrix map) {
-        for (int i = 0; i < count; i++) {
-            Animal animal = scannedAnimals[i];
-
-            if (animal != null && animal.getMass() > 0) {
-
-                int scanTime = animal.getScanTimestamp();
-                int timeDiff = currentTimestamp - scanTime;
-                if (timeDiff % 2 == 0) {
-                    animal.tryToAct(map, currentTimestamp);
-                }
+        scannedAnimals.removeIf(animal -> animal.getMass() <= 0
+                || map.getCell(animal.getX(), animal.getY()).getAnimal() != animal);
+        for (Animal animal : scannedAnimals) {
+            int elapsed = currentTimestamp - animal.getScanTimestamp();
+            if (elapsed > 0
+                    && map.getCell(animal.getX(), animal.getY()).getAnimal() == animal) {
+                animal.tryToAct(map, currentTimestamp);
             }
         }
     }

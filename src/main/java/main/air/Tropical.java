@@ -32,9 +32,10 @@ public final class Tropical extends Air {
 
     @Override
     public boolean event(final CommandInput cmd) {
-        if (cmd.getRainfall() > 0) {
+        if (cmd.getType() != null
+                && "rainfall".equals(cmd.getType().trim()) && cmd.getRainfall() > 0) {
             rainfall = cmd.getRainfall();
-            setAirQual(getAirQual() + (rainfall * RAINFALL_BONUS));
+            applyWeatherEffect(rainfall * RAINFALL_BONUS, cmd.getTimestamp());
             return true;
         }
         return false;

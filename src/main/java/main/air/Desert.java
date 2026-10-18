@@ -32,12 +32,19 @@ public final class Desert extends Air {
 
     @Override
     public boolean event(final CommandInput cmd) {
-        if (cmd.isDesertStorm()) {
+        if (cmd.getType() != null
+                && "desertStorm".equals(cmd.getType().trim()) && cmd.isDesertStorm()) {
             this.desertStorm = cmd.isDesertStorm();
-            setAirQual(getAirQual() - (this.desertStorm ? STORM_PENALTY_VAL : 0));
+            applyWeatherEffect(-STORM_PENALTY_VAL, cmd.getTimestamp());
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void clearWeather() {
+        desertStorm = false;
+        super.clearWeather();
     }
 
     @Override

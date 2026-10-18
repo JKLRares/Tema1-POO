@@ -3,8 +3,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Getter @Setter
-public class Cell {
-    private int x, y;
+public final class Cell {
+    private final int x;
+    private final int y;
     private Plant plant;
     private Animal animal;
     private Water water;

@@ -26,6 +26,7 @@ public final class Water extends Entity {
     private double contaminantIndex;
     private double waterQuality;
     private boolean isFrozen;
+    private int scanTimestamp;
     private int frozenScore;
 
     public Water(final int x, final int y, final double mass, final boolean scanned,
@@ -38,6 +39,7 @@ public final class Water extends Entity {
         this.purity = purity / NORMALIZE_100;
         this.turbidity = 1 - (turbidity / NORMALIZE_100);
         this.contaminantIndex = 1 - (contaminantIndex / NORMALIZE_100);
+        this.isFrozen = isFrozen;
         this.frozenScore = normalizeIsFrozen(isFrozen);
         this.waterQuality = (QUALITY_WEIGHT_PURITY * this.purity
                 + QUALITY_WEIGHT_PH * this.ph

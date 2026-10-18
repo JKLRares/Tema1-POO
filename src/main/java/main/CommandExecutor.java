@@ -1,736 +1,246 @@
 package main;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import fileio.AirInput;
-import fileio.AnimalInput;
 import fileio.CommandInput;
 import fileio.InputLoader;
-import fileio.PairInput;
-import fileio.PlantInput;
 import fileio.SimulationInput;
-import fileio.SoilInput;
-import fileio.TerritorySectionParamsInput;
-import fileio.WaterInput;
 import java.util.List;
 import java.util.Map;
-import main.air.Desert;
-import main.air.Montan;
-import main.air.Polar;
-import main.air.Temperat;
-import main.air.Tropical;
-import main.animals.Carnivore;
-import main.animals.Detritivores;
-import main.animals.Herbivore;
-import main.animals.Omnivore;
-import main.animals.Parasites;
-import main.plants.Algae;
-import main.plants.Ferns;
-import main.plants.FloweringPlants;
-import main.plants.Gymnosperms;
-import main.plants.Mosses;
-import main.soils.DesertSoil;
-import main.soils.ForestSoil;
-import main.soils.GrasslandSoil;
-import main.soils.SwampSoil;
-import main.soils.TundraSoil;
+import main.navigation.Position;
+import main.navigation.Route;
+import main.navigation.RoutePlanner;
 
-public class CommandExecutor {
-    private static final double PLANT_GROWTH_INCREMENT = 0.2;
-    private static final double ENV_VAL_INCREMENT = 0.1;
-    private static final double ROUNDING_FACTOR = 10.0;
-    private static final int WEATHER_CHANGE_DURATION = 2;
+/** Coordinates simulation sessions and commands; ecological rules live in the domain. */
+public final class CommandExecutor {
     private static final int SCAN_COST = 7;
     private static final int LEARN_FACT_COST = 2;
     private static final int IMPROVE_ENV_COST = 10;
-    private static final double PURITY_DIVISOR = 100.0;
-    private static final double INITIAL_GROWTH = 0.0;
+    private static final String NOT_RUNNING =
+            "ERROR: Simulation not started. Cannot perform action";
+    private static final String LOW_BATTERY =
+            "ERROR: Not enough battery left. Cannot perform action";
 
-    private Matrix matrix;
-    private Robot robot;
+    private final WorldFactory worldFactory = new WorldFactory();
+    private final EnvironmentUpdater environmentUpdater = new EnvironmentUpdater();
     private final ObjectMapper mapper;
     private final InputLoader inputLoader;
+    private final SimulationRenderer renderer;
+    private Matrix matrix;
+    private Robot robot;
     private ScannedAnimal scannedAnimals = new ScannedAnimal();
     private Inventory inventory = new Inventory();
-
-    private boolean simulationRunning = false;
-    private int simulationIndex = 0;
-    private int robotChargingTimestamp = 0;
-    private int changeWeatherTimestamp = 0;
-    private int previousTimestamp = 0;
+    private boolean simulationRunning;
+    private int simulationIndex;
+    private long robotChargingTimestamp;
+    private int previousTimestamp;
 
     public CommandExecutor(final InputLoader inputLoader, final ObjectMapper mapper) {
         this.inputLoader = inputLoader;
         this.mapper = mapper;
+        this.renderer = new SimulationRenderer(mapper);
     }
 
-    private void updateEnvironment(final int timestamp) {
+    /** Executes one document in order, emitting one result for every command. */
+    public void executeCommands(final ArrayNode outputArray) {
+        for (CommandInput command : inputLoader.getCommands()) {
+            ObjectNode result = mapper.createObjectNode().put("command", command.getCommand());
+            if (command.getCommand().equals("startSimulation")) {
+                result.put("message", start(command.getTimestamp()));
+            } else if (command.getCommand().equals("endSimulation")) {
+                result.put("message", simulationRunning ? "Simulation has ended." : NOT_RUNNING);
+                simulationRunning = false;
+            } else if (!simulationRunning) {
+                result.put("message", NOT_RUNNING);
+            } else {
+                advanceTo(command.getTimestamp());
+                if (command.getTimestamp() < robotChargingTimestamp) {
+                    result.put("message", "ERROR: Robot still charging. Cannot perform action");
+                } else {
+                    executeRuntime(command, result);
+                }
+            }
+            result.put("timestamp", command.getTimestamp());
+            outputArray.add(result);
+        }
+    }
+
+    private String start(final int timestamp) {
+        if (simulationRunning || simulationIndex >= inputLoader.getSimulations().size()) {
+            return "ERROR: Simulation already started. Cannot perform action";
+        }
+        SimulationInput simulation = inputLoader.getSimulations().get(simulationIndex++);
+        matrix = worldFactory.create(simulation);
+        robot = new Robot(0, 0, simulation.getEnergyPoints());
+        scannedAnimals = new ScannedAnimal();
+        inventory = new Inventory();
+        previousTimestamp = timestamp;
+        robotChargingTimestamp = 0;
+        simulationRunning = true;
+        return "Simulation has started.";
+    }
+
+    private void advanceTo(final int timestamp) {
+        while (previousTimestamp < timestamp) {
+            previousTimestamp++;
+            environmentUpdater.update(matrix, scannedAnimals, previousTimestamp);
+        }
+    }
+
+    private void executeRuntime(final CommandInput command, final ObjectNode result) {
+        switch (command.getCommand()) {
+            case "printEnvConditions" -> result.set("output",
+                    renderer.conditions(matrix, robot.getRobotX(), robot.getRobotY()));
+            case "printMap" -> result.set("output", renderer.map(matrix));
+            case "moveRobot" -> {
+                if (matrix.neighbors(robot.getRobotX(), robot.getRobotY()).isEmpty()) {
+                    result.put("message", "ERROR: No neighboring cell. Cannot perform action");
+                } else {
+                    result.put("message", robot.moveRobot(matrix)
+                            ? "The robot has successfully moved to position (" + robot.getRobotX()
+                            + ", " + robot.getRobotY() + ")." : LOW_BATTERY);
+                }
+            }
+            case "getEnergyStatus" -> result.put("message", "TerraBot has "
+                    + robot.getRobotBattery() + " energy points left.");
+            case "rechargeBattery" -> recharge(command, result);
+            case "changeWeatherConditions" -> changeWeather(command, result);
+            case "scanObject" -> result.put("message", scan(command));
+            case "learnFact" -> result.put("message", learn(command));
+            case "printKnowledgeBase" -> result.set("output", knowledge());
+            case "improveEnvironment" -> result.put("message", improve(command));
+            case "planRoute", "moveTo" -> route(command, result);
+            default -> result.put("message", "ERROR: Unsupported command. Cannot perform action");
+        }
+    }
+
+    private void recharge(final CommandInput command, final ObjectNode result) {
+        long energy = (long) robot.getRobotBattery() + command.getTimeToCharge();
+        if (energy > Integer.MAX_VALUE) {
+            result.put("message", "ERROR: Battery capacity exceeded. Cannot perform action");
+            return;
+        }
+        robot.setRobotBattery((int) energy);
+        robotChargingTimestamp = (long) command.getTimestamp() + command.getTimeToCharge();
+        result.put("message", "Robot battery is charging.");
+    }
+
+    private void changeWeather(final CommandInput command, final ObjectNode result) {
+        boolean changed = false;
         for (int x = 0; x < matrix.getWidth(); x++) {
             for (int y = 0; y < matrix.getHeight(); y++) {
-                Cell cell = matrix.getCell(x, y);
-
-                if (cell.getSoil() != null && cell.getPlant() != null
-                        && cell.getPlant().isScanned()) {
-                    cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel()
-                            + PLANT_GROWTH_INCREMENT);
-                }
-
-                if (cell.getWater() != null && cell.getWater().isScanned()) {
-                    if (timestamp % 2 != 0) {
-                        if (cell.getAir() != null) {
-                            cell.getAir().updateEnvironmentParams(ENV_VAL_INCREMENT, ROUNDING_FACTOR);
-                        }
-                        if (cell.getSoil() != null) {
-                            double newRet = cell.getSoil().getWaterRetention() + ENV_VAL_INCREMENT;
-                            cell.getSoil().setWaterRetention(Math.round(newRet * ROUNDING_FACTOR)
-                                    / ROUNDING_FACTOR);
-                        }
-                    }
-                    if (cell.getPlant() != null && cell.getPlant().isScanned()) {
-                        cell.getPlant().setGrowingLevel(cell.getPlant().getGrowingLevel()
-                                + PLANT_GROWTH_INCREMENT);
-                    }
-                }
-                if (cell.getPlant() != null && cell.getPlant().isScanned()) {
-                    cell.getPlant().grow();
-                    if (cell.getPlant().getLevel().equals("DEAD")) {
-                        cell.setPlant(null);
-                    }
-                }
-                if (cell.getPlant() != null && cell.getAir() != null
-                        && cell.getPlant().isScanned()) {
-                    double oxygenAdd = cell.getPlant().getOxygenOutput()
-                            + cell.getPlant().getMaturityModifier();
-                    double newOx = cell.getAir().getOxygenLevel() + oxygenAdd;
-                    cell.getAir().setOxygenLevel(Math.round(newOx * ROUNDING_FACTOR)
-                            / ROUNDING_FACTOR);
-                    cell.getAir().setAirQual(cell.getAir().airQuality());
-                }
+                changed |= matrix.getCell(x, y).getAir().event(command);
             }
         }
-        scannedAnimals.updateAll(timestamp, matrix);
+        result.put("message", changed ? "The weather has changed."
+                : "ERROR: The weather change does not affect "
+                + "the environment. Cannot perform action");
     }
 
-    /**
-     * Executes the list of commands provided by the input loader.
-     * <p>
-     * Iterates through all commands, handles administrative tasks (like starting/ending
-     * the simulation), updates the environment based on time progression, and delegates
-     * runtime commands (like move, scan, etc.) to specific handlers.
-     * </p>
-     *
-     * @param outputArray The JSON array node where the results of each command will be stored.
-     */
-    public void executeCommands(final ArrayNode outputArray) {
-        List<CommandInput> commands = inputLoader.getCommands();
-
-        for (CommandInput cmd : commands) {
-            String commandName = cmd.getCommand();
-            int timestamp = cmd.getTimestamp();
-            ObjectNode resultNode = mapper.createObjectNode();
-            resultNode.put("command", commandName);
-
-            if (commandName.equals("startSimulation")) {
-                if (simulationIndex < inputLoader.getSimulations().size()) {
-                    SimulationInput simInput = inputLoader.getSimulations().get(simulationIndex);
-                    this.matrix = loadWorld(simInput);
-                    this.robot = new Robot(0, 0, simInput.getEnergyPoints());
-                    simulationIndex++;
-                    simulationRunning = true;
-                    previousTimestamp = timestamp;
-                    this.scannedAnimals = new ScannedAnimal();
-                    this.inventory = new Inventory();
-                    resultNode.put("message", "Simulation has started.");
-                } else {
-                    resultNode.put("message",
-                            "ERROR: Simulation already started. Cannot perform action");
-                }
-
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                continue;
-            }
-
-            if (commandName.equals("endSimulation")) {
-                if (!simulationRunning) {
-                    resultNode.put("message",
-                            "ERROR: Simulation not started. Cannot perform action");
-                } else {
-                    simulationRunning = false;
-                    resultNode.put("message", "Simulation has ended.");
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                continue;
-            }
-
-            if (!simulationRunning) {
-                resultNode.put("message", "ERROR: Simulation not started. Cannot perform action");
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                continue;
-            } else {
-                int cnt = timestamp - previousTimestamp;
-                for (int i = 0; i < cnt; i++) {
-                    updateEnvironment(previousTimestamp + i + 1);
-                }
-            }
-            previousTimestamp = timestamp;
-
-            if (timestamp == changeWeatherTimestamp) {
-                for (int x = 0; x < matrix.getWidth(); x++) {
-                    for (int y = 0; y < matrix.getHeight(); y++) {
-                        Cell cell = matrix.getCell(x, y);
-                        if (cell.getAir() != null) {
-                            cell.getAir().setAirQual(cell.getAir().airQuality());
-                        }
-                    }
-                }
-            }
-
-            processRuntimeCommand(cmd, timestamp, outputArray);
+    private String scan(final CommandInput command) {
+        if (robot.getRobotBattery() < SCAN_COST) {
+            return "ERROR: Not enough energy to perform action";
         }
+        Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
+        boolean colored = !command.getColor().equalsIgnoreCase("none");
+        boolean scented = !command.getSmell().equalsIgnoreCase("none");
+        boolean audible = !command.getSound().equalsIgnoreCase("none");
+        Entity found;
+        String kind;
+        if (!colored && !scented && !audible && cell.getWater() != null) {
+            if (!cell.getWater().isScanned()) {
+                cell.getWater().setScanTimestamp(command.getTimestamp());
+            }
+            found = cell.getWater();
+            kind = "water";
+        } else if (colored && scented && !audible && cell.getPlant() != null) {
+            found = cell.getPlant();
+            kind = "a plant";
+        } else if (colored && scented && audible && cell.getAnimal() != null) {
+            Animal animal = cell.getAnimal();
+            if (!animal.isScanned()) {
+                animal.setScanTimestamp(command.getTimestamp());
+                scannedAnimals.addAnimal(animal);
+            }
+            found = animal;
+            kind = "an animal";
+        } else {
+            return "ERROR: Object not found. Cannot perform action";
+        }
+        found.setScanned(true);
+        inventory.addItem(found.getName());
+        robot.setRobotBattery(robot.getRobotBattery() - SCAN_COST);
+        return "The scanned object is " + kind + ".";
     }
 
-    private void processRuntimeCommand(final CommandInput cmd, final int timestamp,
-                                       final ArrayNode outputArray) {
-        String commandName = cmd.getCommand();
-        ObjectNode resultNode = mapper.createObjectNode();
-        resultNode.put("command", commandName);
-
-        switch (commandName) {
-            case "printEnvConditions":
-                JsonNode conditions = getEnvConditions(robot.getRobotX(), robot.getRobotY());
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    resultNode.set("output", conditions);
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "printMap":
-                ArrayNode mapOutput = getMapOutput();
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    resultNode.set("output", mapOutput);
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "moveRobot":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    boolean moved = robot.moveRobot(matrix);
-                    if (moved) {
-                        String message = "The robot has successfully moved to position ("
-                                + robot.getRobotX() + ", " + robot.getRobotY() + ").";
-                        resultNode.put("message", message);
-                    } else {
-                        resultNode.put("message",
-                                "ERROR: Not enough battery left. Cannot perform action");
-                    }
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "getEnergyStatus":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else if (robot != null) {
-                    String msg = "TerraBot has " + robot.getRobotBattery()
-                            + " energy points left.";
-                    resultNode.put("message", msg);
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "rechargeBattery":
-                int time = cmd.getTimeToCharge();
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    robot.setRobotBattery(robot.getRobotBattery() + time);
-                    robotChargingTimestamp = timestamp + time;
-                    resultNode.put("message", "Robot battery is charging.");
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "changeWeatherConditions":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    boolean changed = false;
-                    for (int x = 0; x < matrix.getWidth(); x++) {
-                        for (int y = 0; y < matrix.getHeight(); y++) {
-                            Cell cell = matrix.getCell(x, y);
-                            if (cell.getAir() != null && cell.getAir().event(cmd)) {
-                                changed = true;
-                            }
-                        }
-                    }
-                    if (changed) {
-                        changeWeatherTimestamp = timestamp + WEATHER_CHANGE_DURATION;
-                        resultNode.put("message", "The weather has changed.");
-                    } else {
-                        resultNode.put("message", "ERROR: The weather change does not affect "
-                                + "the environment. Cannot perform action");
-                    }
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "scanObject":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    int battery = robot.getRobotBattery() - SCAN_COST;
-                    boolean checked = false;
-                    Cell cell = matrix.getCell(robot.getRobotX(), robot.getRobotY());
-                    if (battery < 0) {
-                        resultNode.put("message", "ERROR: Not enough energy to perform action");
-                    } else {
-                        if (cmd.getColor().equalsIgnoreCase("none")
-                                && cmd.getSmell().equalsIgnoreCase("none")
-                                && cmd.getSound().equalsIgnoreCase("none")
-                                && cell.getWater() != null) {
-                            resultNode.put("message", "The scanned object is water.");
-                            checked = true;
-                            cell.getWater().setScanned(true);
-                            inventory.addItem(cell.getWater().getName());
-                        } else if (!cmd.getColor().equalsIgnoreCase("none")
-                                && !cmd.getSmell().equalsIgnoreCase("none")
-                                && cmd.getSound().equalsIgnoreCase("none")
-                                && cell.getPlant() != null) {
-                            resultNode.put("message", "The scanned object is a plant.");
-                            checked = true;
-                            cell.getPlant().setScanned(true);
-                            inventory.addItem(cell.getPlant().getName());
-                        } else if (!cmd.getColor().equalsIgnoreCase("none")
-                                && !cmd.getSmell().equalsIgnoreCase("none")
-                                && !cmd.getSound().equalsIgnoreCase("none")
-                                && cell.getAnimal() != null) {
-                            Animal foundAnimal = cell.getAnimal();
-                            if (!foundAnimal.isScanned()) {
-                                foundAnimal.setScanned(true);
-                                foundAnimal.setScanTimestamp(timestamp);
-                                scannedAnimals.addAnimal(foundAnimal);
-                                inventory.addItem(cell.getAnimal().getName());
-                            }
-                            resultNode.put("message", "The scanned object is an animal.");
-                            checked = true;
-                        }
-                        if (!checked) {
-                            resultNode.put("message",
-                                    "ERROR: Object not found. Cannot perform action");
-                        } else {
-                            robot.setRobotBattery(battery);
-                        }
-                    }
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "learnFact":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    if (robot.getRobotBattery() < LEARN_FACT_COST) {
-                        resultNode.put("message",
-                                "ERROR: Not enough battery left. Cannot perform action");
-                    } else {
-                        String entityName = cmd.getComponents();
-                        String factInfo = cmd.getSubject();
-
-                        if (inventory.addFact(entityName, factInfo)) {
-                            robot.setRobotBattery(robot.getRobotBattery() - LEARN_FACT_COST);
-                            resultNode.put("message",
-                                    "The fact has been successfully saved in the database.");
-                        } else {
-                            resultNode.put("message",
-                                    "ERROR: Subject not yet saved. Cannot perform action");
-                        }
-                    }
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "printKnowledgeBase":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    ArrayNode output = mapper.createArrayNode();
-                    List<String> items = inventory.getCollectedItems();
-                    Map<String, List<String>> knowledgeBase = inventory.getKnowledgeBase();
-
-                    for (String item : items) {
-                        if (knowledgeBase.containsKey(item)
-                                && !knowledgeBase.get(item).isEmpty()) {
-                            ObjectNode itemNode = mapper.createObjectNode();
-                            itemNode.put("topic", item);
-
-                            ArrayNode factsArray = mapper.createArrayNode();
-                            for (String fact : knowledgeBase.get(item)) {
-                                factsArray.add(fact);
-                            }
-                            itemNode.set("facts", factsArray);
-                            output.add(itemNode);
-                        }
-                    }
-                    resultNode.set("output", output);
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            case "improveEnvironment":
-                if (timestamp < robotChargingTimestamp) {
-                    resultNode.put("message",
-                            "ERROR: Robot still charging. Cannot perform action");
-                } else {
-                    if (robot.getRobotBattery() < IMPROVE_ENV_COST) {
-                        resultNode.put("message",
-                                "ERROR: Not enough battery left. Cannot perform action");
-                    } else {
-                        String improvementType = cmd.getImprovementType();
-                        String name = cmd.getName();
-                        if (!inventory.getCollectedItems().contains(name)) {
-                            resultNode.put("message",
-                                    "ERROR: Subject not yet saved. Cannot perform action");
-                        } else if (!inventory.checkRequirement(name, improvementType)) {
-                            resultNode.put("message",
-                                    "ERROR: Fact not yet saved. Cannot perform action");
-                        } else {
-                            Cell currentCell = matrix.getCell(robot.getRobotX(),
-                                    robot.getRobotY());
-                            String successMessage = inventory.applyImprovement(currentCell,
-                                    improvementType, name);
-                            robot.setRobotBattery(robot.getRobotBattery() - IMPROVE_ENV_COST);
-                            resultNode.put("message", successMessage);
-                        }
-                    }
-                }
-                resultNode.put("timestamp", timestamp);
-                outputArray.add(resultNode);
-                break;
-
-            default:
-                break;
+    private String learn(final CommandInput command) {
+        if (robot.getRobotBattery() < LEARN_FACT_COST) {
+            return LOW_BATTERY;
         }
+        if (!inventory.addFact(command.getComponents(), command.getSubject())) {
+            return "ERROR: Subject not yet saved. Cannot perform action";
+        }
+        robot.setRobotBattery(robot.getRobotBattery() - LEARN_FACT_COST);
+        return "The fact has been successfully saved in the database.";
     }
 
-    private Matrix loadWorld(final SimulationInput params) {
-        String dim = params.getTerritoryDim();
-        String[] parts = dim.split("x");
-        int rows = Integer.parseInt(parts[0]);
-        int cols = Integer.parseInt(parts[1]);
-
-        Matrix newMatrix = new Matrix(rows, cols);
-        TerritorySectionParamsInput sections = params.getTerritorySectionParams();
-
-        if (sections.getSoil() != null) {
-            parseSoils(sections.getSoil(), newMatrix);
-        }
-        if (sections.getPlants() != null) {
-            parsePlants(sections.getPlants(), newMatrix);
-        }
-        if (sections.getAnimals() != null) {
-            parseAnimals(sections.getAnimals(), newMatrix);
-        }
-        if (sections.getWater() != null) {
-            parseWater(sections.getWater(), newMatrix);
-        }
-        if (sections.getAir() != null) {
-            parseAir(sections.getAir(), newMatrix);
-        }
-
-        return newMatrix;
-    }
-
-    private void parseSoils(final List<SoilInput> list, final Matrix world) {
-        for (SoilInput entry : list) {
-            String type = entry.getType();
-            for (PairInput loc : entry.getSections()) {
-                Soil newSoil = null;
-                if (type.equalsIgnoreCase("ForestSoil")) {
-                    newSoil = new ForestSoil(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getLeafLitter());
-                } else if (type.equalsIgnoreCase("SwampSoil")) {
-                    newSoil = new SwampSoil(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getWaterLogging());
-                } else if (type.equalsIgnoreCase("TundraSoil")) {
-                    newSoil = new TundraSoil(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(),
-                            entry.getPermafrostDepth());
-                } else if (type.equalsIgnoreCase("DesertSoil")) {
-                    newSoil = new DesertSoil(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getSalinity());
-                } else if (type.equalsIgnoreCase("GrasslandSoil")) {
-                    newSoil = new GrasslandSoil(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getNitrogen(), entry.getWaterRetention(),
-                            entry.getSoilpH(), entry.getOrganicMatter(), entry.getRootDensity());
-                }
-                if (newSoil != null) {
-                    world.placeEntity(newSoil);
-                }
+    private ArrayNode knowledge() {
+        ArrayNode output = mapper.createArrayNode();
+        Map<String, List<String>> facts = inventory.getKnowledgeBase();
+        for (String item : inventory.getCollectedItems()) {
+            if (facts.containsKey(item) && !facts.get(item).isEmpty()) {
+                ObjectNode topic = output.addObject().put("topic", item);
+                ArrayNode entries = topic.putArray("facts");
+                facts.get(item).forEach(entries::add);
             }
         }
+        return output;
     }
 
-    private void parsePlants(final List<PlantInput> list, final Matrix world) {
-        for (PlantInput entry : list) {
-            String type = entry.getType();
-            String typeUpper = type.toUpperCase();
-
-            for (PairInput loc : entry.getSections()) {
-                Plant newPlant = null;
-                if (typeUpper.contains("FLOWER")) {
-                    newPlant = new FloweringPlants(loc.getX(), loc.getY(), type, entry.getName(),
-                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
-                } else if (typeUpper.contains("FERN")) {
-                    newPlant = new Ferns(loc.getX(), loc.getY(), type, entry.getName(),
-                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
-                } else if (typeUpper.contains("ALGAE")) {
-                    newPlant = new Algae(loc.getX(), loc.getY(), type, entry.getName(),
-                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
-                } else if (typeUpper.contains("MOSS")) {
-                    newPlant = new Mosses(loc.getX(), loc.getY(), type, entry.getName(),
-                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
-                } else if (typeUpper.contains("GYMNOSPERM")) {
-                    newPlant = new Gymnosperms(loc.getX(), loc.getY(), type, entry.getName(),
-                            entry.getMass(), INITIAL_GROWTH, "YOUNG", false);
-                }
-                if (newPlant != null) {
-                    world.placeEntity(newPlant);
-                }
+    private String improve(final CommandInput command) {
+        if (robot.getRobotBattery() < IMPROVE_ENV_COST) {
+            return LOW_BATTERY;
+        }
+        if (!inventory.getCollectedItems().contains(command.getName())) {
+            return "ERROR: Subject not yet saved. Cannot perform action";
+        }
+        if (!inventory.checkRequirement(command.getName(), command.getImprovementType())) {
+            return "ERROR: Fact not yet saved. Cannot perform action";
+        }
+        String message = inventory.applyImprovement(
+                matrix.getCell(robot.getRobotX(), robot.getRobotY()),
+                command.getImprovementType(), command.getName());
+        robot.setRobotBattery(robot.getRobotBattery() - IMPROVE_ENV_COST);
+        return message;
+    }
+    private void route(final CommandInput command, final ObjectNode result) {
+        if (!matrix.contains(command.getTargetX(), command.getTargetY())) {
+            result.put("message", "ERROR: Destination outside the world. Cannot perform action");
+            return;
+        }
+        Route route;
+        if (command.getCommand().equals("moveTo")) {
+            var movement = robot.moveTo(matrix, command.getTargetX(), command.getTargetY());
+            if (movement.isEmpty()) {
+                result.put("message", LOW_BATTERY);
+                return;
             }
+            route = movement.orElseThrow();
+        } else {
+            route = new RoutePlanner().plan(matrix,
+                    new Position(robot.getRobotX(), robot.getRobotY()),
+                    new Position(command.getTargetX(), command.getTargetY()));
+        }
+        ObjectNode output = result.putObject("output");
+        output.put("energyCost", route.energyCost());
+        output.put("steps", route.path().size() - 1);
+        output.put("affordable", command.getCommand().equals("moveTo")
+                || route.energyCost() <= robot.getRobotBattery());
+        ArrayNode path = output.putArray("path");
+        for (Position position : route.path()) {
+            path.addArray().add(position.x()).add(position.y());
         }
     }
 
-    private void parseAnimals(final List<AnimalInput> list, final Matrix world) {
-        for (AnimalInput entry : list) {
-            String type = entry.getType();
-            String typeUpper = type.toUpperCase();
-
-            for (PairInput loc : entry.getSections()) {
-                Animal newAnimal = null;
-                if (typeUpper.contains("HERBIVORE")) {
-                    newAnimal = new Herbivore(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type);
-                } else if (typeUpper.contains("CARNIVORE")) {
-                    newAnimal = new Carnivore(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type);
-                } else if (typeUpper.contains("OMNIVORE")) {
-                    newAnimal = new Omnivore(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type);
-                } else if (typeUpper.contains("DETRITIVORE")) {
-                    newAnimal = new Detritivores(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type);
-                } else if (typeUpper.contains("PARASITE")) {
-                    newAnimal = new Parasites(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type);
-                }
-                if (newAnimal != null) {
-                    world.placeEntity(newAnimal);
-                }
-            }
-        }
-    }
-
-    private void parseWater(final List<WaterInput> list, final Matrix world) {
-        for (WaterInput entry : list) {
-            double waterQuality = entry.getPurity() / PURITY_DIVISOR;
-            int frozenScore = 0;
-
-            for (PairInput loc : entry.getSections()) {
-                Water newWater = new Water(loc.getX(), loc.getY(), entry.getMass(), false,
-                        entry.getName(), entry.getType(), entry.getSalinity(), entry.getPH(),
-                        entry.getPurity(), entry.getTurbidity(), entry.getContaminantIndex(),
-                        waterQuality, entry.isFrozen(), frozenScore);
-                world.placeEntity(newWater);
-            }
-        }
-    }
-
-    private void parseAir(final List<AirInput> list, final Matrix world) {
-        for (AirInput entry : list) {
-            String type = entry.getType();
-            for (PairInput loc : entry.getSections()) {
-                Air newAir = null;
-                double temp = entry.getTemperature();
-
-                if (type.equalsIgnoreCase("MountainAir")) {
-                    newAir = new Montan(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getHumidity(), temp,
-                            entry.getOxygenLevel(), entry.getAltitude());
-                } else if (type.equalsIgnoreCase("TemperateAir")) {
-                    newAir = new Temperat(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getHumidity(), temp,
-                            entry.getOxygenLevel(), entry.getPollenLevel());
-                } else if (type.equalsIgnoreCase("TropicalAir")) {
-                    newAir = new Tropical(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getHumidity(), temp,
-                            entry.getOxygenLevel(), entry.getCo2Level());
-                } else if (type.equalsIgnoreCase("DesertAir")) {
-                    newAir = new Desert(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getHumidity(), temp,
-                            entry.getOxygenLevel(), entry.getDustParticles());
-                } else if (type.equalsIgnoreCase("PolarAir")) {
-                    newAir = new Polar(loc.getX(), loc.getY(), entry.getMass(), false,
-                            entry.getName(), type, entry.getHumidity(), temp,
-                            entry.getOxygenLevel(), entry.getIceCrystalConcentration());
-                }
-                if (newAir != null) {
-                    world.placeEntity(newAir);
-                }
-            }
-        }
-    }
-
-    private JsonNode getEnvConditions(final int x, final int y) {
-        ObjectNode envNode = mapper.createObjectNode();
-        Cell cell = matrix.getCell(x, y);
-
-        if (cell.getSoil() != null) {
-            Soil s = cell.getSoil();
-            ObjectNode sNode = mapper.createObjectNode();
-            sNode.put("type", s.getType());
-            sNode.put("name", s.getName());
-            sNode.put("mass", s.getMass());
-            sNode.put("nitrogen", s.getNitrogen());
-            sNode.put("waterRetention", s.getWaterRetention());
-            sNode.put("soilpH", s.getSoilph());
-            sNode.put("organicMatter", s.getOrganicMatter());
-            sNode.put("soilQuality", s.soilQuality());
-
-            ObjectNode fullDump = mapper.valueToTree(s);
-            removeCommonFields(fullDump);
-            fullDump.remove(List.of("nitrogen", "waterRetention", "soilph", "organicMatter",
-                    "soilQuality"));
-            sNode.setAll(fullDump);
-
-            envNode.set("soil", sNode);
-        }
-
-        if (cell.getPlant() != null) {
-            ObjectNode pNode = mapper.createObjectNode();
-            pNode.put("type", cell.getPlant().getType());
-            pNode.put("name", cell.getPlant().getName());
-            pNode.put("mass", cell.getPlant().getMass());
-            envNode.set("plants", pNode);
-        }
-
-        if (cell.getAnimal() != null) {
-            ObjectNode aNode = mapper.createObjectNode();
-            aNode.put("type", cell.getAnimal().getType());
-            aNode.put("name", cell.getAnimal().getName());
-            aNode.put("mass", cell.getAnimal().getMass());
-            envNode.set("animals", aNode);
-        }
-
-        if (cell.getWater() != null) {
-            ObjectNode wNode = mapper.createObjectNode();
-            wNode.put("type", cell.getWater().getType());
-            wNode.put("name", cell.getWater().getName());
-            wNode.put("mass", cell.getWater().getMass());
-            envNode.set("water", wNode);
-        }
-
-        if (cell.getAir() != null) {
-            Air a = cell.getAir();
-            ObjectNode airNode = mapper.createObjectNode();
-            airNode.put("type", a.getType());
-            airNode.put("name", a.getName());
-            airNode.put("mass", a.getMass());
-            airNode.put("humidity", a.getHumidity());
-            airNode.put("temperature", a.getTemperature());
-            airNode.put("oxygenLevel", a.getOxygenLevel());
-            airNode.put("airQuality", a.getAirQual());
-            ObjectNode fullDump = mapper.valueToTree(a);
-            removeCommonFields(fullDump);
-            fullDump.remove(List.of("humidity", "temperature", "oxygenLevel", "airQuality",
-                    "airQual", "dustParticles", "season", "rainfall"));
-            airNode.setAll(fullDump);
-            envNode.set("air", airNode);
-        }
-
-        return envNode;
-    }
-
-    private ArrayNode getMapOutput() {
-        ArrayNode mapArray = mapper.createArrayNode();
-        int width = matrix.getWidth();
-        int height = matrix.getHeight();
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Cell cell = matrix.getCell(x, y);
-                ObjectNode sectionNode = mapper.createObjectNode();
-
-                ArrayNode coords = mapper.createArrayNode();
-                coords.add(x);
-                coords.add(y);
-                sectionNode.set("section", coords);
-
-                int count = 0;
-                if (cell.getPlant() != null) {
-                    count++;
-                }
-                if (cell.getAnimal() != null) {
-                    count++;
-                }
-                if (cell.getWater() != null) {
-                    count++;
-                }
-                sectionNode.put("totalNrOfObjects", count);
-
-                sectionNode.put("airQuality", cell.getAir().resultAirQaulity());
-                sectionNode.put("soilQuality", cell.getSoil().resultSoilQuality());
-                mapArray.add(sectionNode);
-            }
-        }
-        return mapArray;
-    }
-
-    private void removeCommonFields(final ObjectNode node) {
-        node.remove("x");
-        node.remove("y");
-        node.remove("scanned");
-        node.remove("entityType");
-        node.remove("type");
-        node.remove("name");
-        node.remove("mass");
-        if (node.has("specificType")) {
-            node.remove("specificType");
-        }
-        if (node.has("variant")) {
-            node.remove("variant");
-        }
-    }
 }
